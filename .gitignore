@@ -13,3 +13,6 @@
 
 #config File
 my_shop_config.py
+
+#ignore pycache
+__pycache__/
