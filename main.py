@@ -12,12 +12,99 @@ from googletrans import Translator
 
 from language import *
 
+class PandasModel(QAbstractTableModel):
+    def __init__(self, data: pd.DataFrame):
+        super().__init__()
+        self._data = data
+
+    def rowCount(self, index):
+        return self._data.shape[0]
+
+    def columnCount(self, parnet=None):
+        return self._data.shape[1]
+
+    def data(self, index, role=Qt.ItemDataRole.DisplayRole):
+        if index.isValid():
+            if role == Qt.ItemDataRole.DisplayRole or role == Qt.ItemDataRole.EditRole:
+                value = self._data.iloc[index.row(), index.column()]
+                return str(value)
+        return None
+
+    def setData(self, index, value, role):
+        if role == Qt.ItemDataRole.EditRole:
+            self._data.iloc[index.row(), index.column()] = value
+            return True
+        return False
+
+    def headerData(self, col, orientation, role):
+        if orientation == Qt.Orientation.Horizontal and role == Qt.ItemDataRole.DisplayRole:
+            return self._data.columns[col]
+    
+    def getHeaderKeys(self):
+        return self._data.keys()
+    
+    def setHeaderData(self, col, value, role):
+        if role == Qt.ItemDataRole.EditRole:
+            self._data.rename(columns={self._data.columns[col]:value}, inplace=True)
+            return True
+        return False
+
+
+    def flags(self, index):
+        return Qt.ItemFlag.ItemIsSelectable | Qt.ItemFlag.ItemIsEnabled | Qt.ItemFlag.ItemIsEditable
+    
+    def getData(self):
+        return self._data
+    
+    def removeRow(self, row, reset_index=True):
+        if row in self._data.index:
+            self._data.drop(index=row, inplace=True)
+            if reset_index:
+                self._data.reset_index(drop=True, inplace=True)
+            # print(f"removed row {row}")
+        else:
+            print(f"no row {row}")
+            print(f"index is: {self._data.index}")
+
+
+class TableImport(QTableView):
+
+    def __init__(self, parent = None):
+    
+        QTableView.__init__(self, parent)
+    
+    def contextMenuEvent(self, event):
+        # print("triggered")
+        menu = QMenu()
+        delRow = menu.addAction("Delete selected Rows")
+        delRow.triggered.connect(self.removeRowParameter)
+        menu.exec(self.mapToGlobal(event.pos()))
+    
+    def removeRowParameter(self):
+        for index in sorted(self.selectionModel().selectedRows()):
+            # print('Row %d is selected' % index.row())
+            self.model().removeRow(index.row(), False)
+        self.model()._data.reset_index(drop=True, inplace=True)
+    
+    def dragEnterEvent(self, event):
+        print("dragEnterEvent")
+        event.accept()
+
+    def dragMoveEvent(self, event):
+        print("dragMoveEvent")
+        event.accept()
+
+    def dropEvent(self, event):
+        print("dropEnterEvent")
+
 
 class Ui_MainWindow(object):
     def __init__(self, MainWindow: QMainWindow, language: Language = Language.English):
         QDir.addSearchPath('icons', os.path.dirname(os.path.realpath(__file__))+r"\resources")
         self.language = Language.German
         self.MainWindow = MainWindow
+        self.selectedFrameIndex = 0
+        self.frameList = []
     
     def setupUi(self):
         self.MainWindow.setWindowTitle(self.language.WindowTitle)
@@ -25,7 +112,43 @@ class Ui_MainWindow(object):
         self._createMenuBar()
         self._createToolBars()
         self._connectActions()
-        
+        # Create Status Bar
+        self.statusbar = self.MainWindow.statusBar()
+        self.tableCountLabel = QLabel(f"{self.language.Tablecount}: 0")
+        self.statusbar.setFont(QFont('Times', 11))
+        self.statusbar.addPermanentWidget(self.tableCountLabel)
+
+        #Create Tab Group
+        self.tabGroup = QTabWidget(self.MainWindow)
+        self.tabGroup.setTabShape(QTabWidget.TabShape.Rounded)
+        self.tabGroup.setDocumentMode(False)
+        self.tabGroup.setTabsClosable(False)
+        self.tabGroup.setTabBarAutoHide(False)
+        self.MainWindow.setCentralWidget(self.tabGroup)
+        self.tabGroup.setFont(QFont('Times', 13))
+        # Create Tabs
+        # Import Data Tab
+        self.tab_Table = QWidget()
+        self.tabGroup.addTab(self.tab_Table, self.language.Tabs.data)
+        self.tableVLayout =  QVBoxLayout(self.tab_Table)
+        # self.searchBar = QLineEdit(self.tab_Table)
+        # self.searchBar.setMaximumWidth(500)
+        # self.tableVLayout.addWidget(self.searchBar)
+        self.importTable = TableImport(self.tab_Table)
+        self.tableVLayout.addWidget(self.importTable)
+
+
+
+        # Product Overview Tab
+        self.tab_Products = QWidget()
+        self.tabGroup.addTab(self.tab_Products, self.language.Tabs.products)
+
+        # Product Detail Tab
+        self.tab_Detail = QWidget()
+        self.tabGroup.addTab(self.tab_Detail, self.language.Tabs.detail)
+        self.tabGroup.setTabEnabled(2, False)
+
+
     
     def _createActions(self):
         # File Actions
@@ -88,6 +211,7 @@ class Ui_MainWindow(object):
         self.MainWindow.addToolBar(self.tableToolBar)
         self.tableToolBar.addActions([self.newAction, self.deleteAction, self.removeTableAction, self.backAction])
         self.tableSpinBox = QSpinBox()
+        self.tableSpinBox.setMaximum(0)
         self.tableSpinBox.setButtonSymbols(QAbstractSpinBox.ButtonSymbols.NoButtons)
         self.tableSpinBox.setToolTip(self.language.Hints.currentTableHint)
         self.tableToolBar.addWidget(self.tableSpinBox)
@@ -105,7 +229,54 @@ class Ui_MainWindow(object):
     
     def _connectActions(self):
         # Connect File actions
+        # File Actions
+        self.openAction.triggered.connect(self.openFile)
+        # Table actions
+        self.newAction
+        self.deleteAction
+        self.removeTableAction
+        self.saveAction
+        self.saveAllAction
+        self.backAction
+        self.nextAction
+        # Shopware Actions
+        self.translateAction
+        self.uploadAction
+        # Exit Action
+        self.exitAction
+        # Help Action
+        self.helpAction
         self.changeLanguageAction.triggered.connect(self.retranslateUi)
+    
+    def openFile(self):
+        fname = QFileDialog.getOpenFileName(self.MainWindow, 'Open file', 'c:\\',"Data Files(*.pdf *.csv *.xls*)")[0]
+        if not fname:
+            return
+        try:
+            if fname.endswith(".pdf"):
+                frames = tabula.read_pdf(fname, pages='all')
+            elif fname.endswith('.csv'):
+                frames = [pd.read_csv(fname)]
+            elif fname.lower().endswith('.xlsx'):
+                frames = [pd.read_excel(fname)]
+            else:
+                self.statusbar.showMessage(self.language.InvalidFile, 5000)
+
+        except:
+            self.statusbar.showMessage(self.language.fileError, 5000)
+        else:
+            if not frames:
+                self.statusbar.showMessage(self.language.noFrames, 5000)
+            else:
+                frameLength = len(frames)
+                self.statusbar.showMessage(self.language.framesFound+str(frameLength), 5000)
+                self.tableCountLabel.setText(self.language.Tablecount+":"+str(frameLength))
+                self.tableSpinBox.setMaximum(frameLength-1)
+                self.selectedFrameIndex = 0
+                self.frameList = list(map(PandasModel, frames))
+                self.importTable.setModel(self.frameList[self.selectedFrameIndex])
+
+
     
 
 

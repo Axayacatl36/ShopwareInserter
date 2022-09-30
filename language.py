@@ -6,6 +6,11 @@ from numpy import absolute
 class Language():
     class English():
         WindowTitle = "ShopwareProductInserter"
+        Tablecount  = "Tablecount"
+        InvalidFile = "Invalid File"
+        fileError   = "Error while reading file"
+        noFrames    = "Couldnt find any tables"
+        framesFound = "Found Tables:"
         class Actions():
             openAction      = "Open..."
             newAction       = "Add Row"
@@ -39,10 +44,21 @@ class Language():
             file    = "File"
             table   = "Table"
             help  = "Help"
+        
+        class Tabs():
+            data    = "Import Data"
+            products = "Product Overview"
+            detail  ="Details"
             
         
     class German():
         WindowTitle = "ShopwareProduktInserter"
+        Tablecount  = "Tabellenanzahl"
+        InvalidFile = "Ungültige Datei"
+        fileError   = "Es ist ein Fehler beim lesen der Datei aufgetreten"
+        noFrames    = "Es konnten keine Tabellen gefunden werden"
+        framesFound = "Gefundene Tabellen:"
+
         class Actions():
             openAction      = "Öffnen..."
             newAction       = "Neue Reihe"
@@ -76,6 +92,11 @@ class Language():
             file    = "Datei"
             table   = "Tabelle"
             help    = "Hilfe"
+        
+        class Tabs():
+            data    = "Daten importieren"
+            products = "Übersicht"
+            detail  ="Details"
 
 class TranslationLanguages(enum.Enum):
     English = "en"
