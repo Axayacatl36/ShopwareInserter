@@ -25,6 +25,7 @@ class Ui_MainWindow(object):
         self._createMenuBar()
         self._createToolBars()
         self._connectActions()
+        
     
     def _createActions(self):
         # File Actions
@@ -32,8 +33,11 @@ class Ui_MainWindow(object):
         # Table actions
         self.newAction  = QAction(QIcon("icons:add-row.png"), "&"+self.language.Actions.newAction, self.MainWindow)
         self.deleteAction = QAction(QIcon("icons:delete-row.png"), "&"+self.language.Actions.deleteAction, self.MainWindow)
+        self.removeTableAction = QAction(QIcon("icons:remove-table.png"), "&"+self.language.Actions.removeTableAction, self.MainWindow)
         self.saveAction = QAction(QIcon("icons:table-save.png"), "&"+self.language.Actions.saveAction, self.MainWindow)
         self.saveAllAction = QAction(QIcon("icons:table-save-all.png"), "&"+self.language.Actions.saveAllAction, self.MainWindow)
+        self.backAction = QAction(QIcon("icons:back.png"), "&"+self.language.Actions.backAction, self.MainWindow)
+        self.nextAction = QAction(QIcon("icons:next.png"), "&"+self.language.Actions.nextAction, self.MainWindow)
         # Shopware Actions
         self.translateAction = QAction(QIcon("icons:translate.png"), "&"+self.language.Actions.translateAction, self.MainWindow)
         self.uploadAction = QAction(QIcon("icons:upload.png"), "&"+self.language.Actions.uploadAction, self.MainWindow)
@@ -53,6 +57,9 @@ class Ui_MainWindow(object):
         self.openAction.setToolTip(self.language.Hints.openHint)
         self.newAction.setToolTip(self.language.Hints.newHint)
         self.deleteAction.setToolTip(self.language.Hints.deleteHint)
+        self.removeTableAction.setToolTip(self.language.Hints.removeTableHint)
+        self.newAction.setToolTip(self.language.Hints.nextHint)
+        self.backAction.setToolTip(self.language.Hints.backHint)
         self.saveAction.setToolTip(self.language.Hints.saveHint)
         self.saveAllAction.setToolTip(self.language.Hints.saveAllHint)
         self.uploadAction.setToolTip(self.language.Hints.uploadHint)
@@ -66,7 +73,7 @@ class Ui_MainWindow(object):
         # Table Menu
         self.tableMenu = QMenu("&"+self.language.Menu.table, self.MainWindow)
         menuBar.addMenu(self.tableMenu)
-        self.tableMenu.addActions([self.newAction, self.deleteAction, self.saveAction, self.saveAllAction, self.translateAction, self.uploadAction])
+        self.tableMenu.addActions([self.newAction, self.deleteAction, self.removeTableAction, self.saveAction, self.saveAllAction, self.backAction, self.nextAction, self.translateAction, self.uploadAction])
         # Help Menu
         self.helpMenu = QMenu("&"+self.language.Menu.help, self.MainWindow)
         menuBar.addMenu(self.helpMenu)
@@ -79,7 +86,12 @@ class Ui_MainWindow(object):
         # Table toolbar
         self.tableToolBar = QToolBar("Table", self.MainWindow)
         self.MainWindow.addToolBar(self.tableToolBar)
-        self.tableToolBar.addActions([self.newAction, self.deleteAction, self.saveAction, self.saveAllAction])
+        self.tableToolBar.addActions([self.newAction, self.deleteAction, self.removeTableAction, self.backAction])
+        self.tableSpinBox = QSpinBox()
+        self.tableSpinBox.setButtonSymbols(QAbstractSpinBox.ButtonSymbols.NoButtons)
+        self.tableSpinBox.setToolTip(self.language.Hints.currentTableHint)
+        self.tableToolBar.addWidget(self.tableSpinBox)
+        self.tableToolBar.addActions([self.nextAction,self.saveAction, self.saveAllAction])
         # Shopware upload
         self.uploadToolBar = QToolBar("Upload", self.MainWindow)
         self.MainWindow.addToolBar(self.uploadToolBar)
@@ -116,6 +128,9 @@ class Ui_MainWindow(object):
         # Table actions
         self.newAction.setText(self.language.Actions.newAction)
         self.deleteAction.setText(self.language.Actions.deleteAction)
+        self.removeTableAction.setText(self.language.Actions.removeTableAction)
+        self.backAction.setText(self.language.Actions.backAction)
+        self.newAction.setText(self.language.Actions.nextAction)
         self.saveAction.setText(self.language.Actions.saveAction)
         self.saveAllAction.setText(self.language.Actions.saveAllAction)
         # Shopware Actions
@@ -124,11 +139,14 @@ class Ui_MainWindow(object):
         # Help Action
         self.helpAction.setText(self.language.Actions.helpAction)
         self.changeLanguageAction.setText(self.language.Actions.changeLanguageAction)
-
         # Hints
         self.openAction.setToolTip(self.language.Hints.openHint)
         self.newAction.setToolTip(self.language.Hints.newHint)
         self.deleteAction.setToolTip(self.language.Hints.deleteHint)
+        self.removeTableAction.setToolTip(self.language.Hints.removeTableHint)
+        self.backAction.setToolTip(self.language.Hints.backHint)
+        self.tableSpinBox.setToolTip(self.language.Hints.currentTableHint)
+        self.nextAction.setToolTip(self.language.Hints.nextHint)
         self.saveAction.setToolTip(self.language.Hints.saveHint)
         self.saveAllAction.setToolTip(self.language.Hints.saveAllHint)
         self.uploadAction.setToolTip(self.language.Hints.uploadHint)
