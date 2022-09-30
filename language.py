@@ -14,7 +14,7 @@ class Language():
             saveAllAction   = "Save all Tables"
             translateAction = "Translate"
             uploadAction    = "Upload"
-            helpContentAction = "Help"
+            helpAction = "Help"
             changeLanguageAction = "Change Language"
         
         class Hints():
@@ -26,11 +26,12 @@ class Language():
             translateHint = "Translate selected Products to selected Language"
             uploadHint  = "Uploads all saved and flagged products to Shopware"
             helpHint    = "Help Content"
+            changeLanguageHint = "Choose new language"
         
         class Menu():
             file    = "File"
             table   = "Table"
-            Helper  = "Help"
+            help  = "Help"
             
         
     class German():
@@ -55,6 +56,7 @@ class Language():
             translateHint = "Übersetze alle ausgewählten Produkte in die gewünschte Sprache"
             uploadHint  = "Lädt alle gespeicherten und markierten Produkte zu Shopware hoch"
             helpHint    = "Hilfe Inhalt"
+            changeLanguageHint = "Wähle die neue Sprache"
         
         class Menu():
             file    = "Datei"
