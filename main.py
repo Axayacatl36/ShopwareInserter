@@ -12,12 +12,12 @@ from googletrans import Translator
 
 from language import *
 
-class PandasModel(QAbstractTableModel):
+class ImportTableModel(QAbstractTableModel):
     def __init__(self, data: pd.DataFrame):
         super().__init__()
         self._data = data
 
-    def rowCount(self, index):
+    def rowCount(self, index=0):
         return self._data.shape[0]
 
     def columnCount(self, parnet=None):
@@ -40,9 +40,6 @@ class PandasModel(QAbstractTableModel):
         if orientation == Qt.Orientation.Horizontal and role == Qt.ItemDataRole.DisplayRole:
             return self._data.columns[col]
     
-    def getHeaderKeys(self):
-        return self._data.keys()
-    
     def setHeaderData(self, col, value, role):
         if role == Qt.ItemDataRole.EditRole:
             self._data.rename(columns={self._data.columns[col]:value}, inplace=True)
@@ -50,11 +47,25 @@ class PandasModel(QAbstractTableModel):
         return False
 
 
-    def flags(self, index):
-        return Qt.ItemFlag.ItemIsSelectable | Qt.ItemFlag.ItemIsEnabled | Qt.ItemFlag.ItemIsEditable
+    def flags(self, index: QModelIndex):
+        if not index.isValid():
+            return Qt.ItemFlag.ItemIsDropEnabled
+        if index.row() < self.rowCount():
+            return Qt.ItemFlag.ItemIsEnabled | Qt.ItemFlag.ItemIsEditable | Qt.ItemFlag.ItemIsSelectable | Qt.ItemFlag.ItemIsDragEnabled
+        return Qt.ItemFlag.ItemIsEnabled | Qt.ItemFlag.ItemIsEditable
     
-    def getData(self):
-        return self._data
+    def supportedDropActions(self) -> bool:
+        return Qt.DropAction.MoveAction | Qt.DropAction.CopyAction
+    
+    def relocateRow(self, row_source, row_target) -> None:
+        row_a, row_b = max(row_source, row_target), min(row_source, row_target)
+        self.beginMoveRows(QModelIndex(), row_a, row_a, QModelIndex(), row_b)
+        copyRow = self._data.iloc[row_source]
+        self._data.drop(index=row_source, inplace=True)
+        self._data.loc[row_target+0.5] = copyRow
+        self._data.sort_index(inplace=True)
+        self._data.reset_index(drop=True, inplace=True)
+        self.endMoveRows()
     
     def removeRow(self, row, reset_index=True):
         if row in self._data.index:
@@ -68,10 +79,25 @@ class PandasModel(QAbstractTableModel):
 
 
 class TableImport(QTableView):
+    class DropmarkerStyle(QProxyStyle):
+        def drawPrimitive(self, element, option, painter, widget=None):
+            """Draw a line across the entire row rather than just the column we're hovering over."""
+            if element == self.PrimitiveElement.PE_IndicatorItemViewItemDrop and not option.rect.isNull():
+                option_new = QStyleOption(option)
+                option_new.rect.setLeft(0)
+                if widget:
+                    option_new.rect.setRight(widget.width())
+                option = option_new
+            super().drawPrimitive(element, option, painter, widget)
 
     def __init__(self, parent = None):
-    
         QTableView.__init__(self, parent)
+        self.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
+        self.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
+        self.setDragDropMode(QAbstractItemView.DragDropMode.InternalMove)
+        self.setDragDropOverwriteMode(False)
+        self.setDragEnabled(True)
+        self.setStyle(self.DropmarkerStyle())
     
     def contextMenuEvent(self, event):
         # print("triggered")
@@ -86,16 +112,21 @@ class TableImport(QTableView):
             self.model().removeRow(index.row(), False)
         self.model()._data.reset_index(drop=True, inplace=True)
     
-    def dragEnterEvent(self, event):
-        print("dragEnterEvent")
-        event.accept()
-
-    def dragMoveEvent(self, event):
-        print("dragMoveEvent")
-        event.accept()
-
     def dropEvent(self, event):
-        print("dropEnterEvent")
+        if (event.source() is not self or
+            (event.dropAction() != Qt.DropAction.CopyAction and
+             self.dragDropMode() != QAbstractItemView.DragDropMode.InternalMove)):
+            super().dropEvent(event)
+
+        selection = self.selectedIndexes()
+        from_index = selection[0].row() if selection else -1
+        to_index = self.indexAt(event.position().toPoint()).row()
+        if (0 <= from_index < self.model().rowCount() and
+            0 <= to_index < self.model().rowCount() and
+            from_index != to_index):
+            self.model().relocateRow(from_index, to_index)
+            event.accept()
+        super().dropEvent(event)
 
 
 class Ui_MainWindow(object):
@@ -273,7 +304,7 @@ class Ui_MainWindow(object):
                 self.tableCountLabel.setText(self.language.Tablecount+":"+str(frameLength))
                 self.tableSpinBox.setMaximum(frameLength-1)
                 self.selectedFrameIndex = 0
-                self.frameList = list(map(PandasModel, frames))
+                self.frameList = list(map(ImportTableModel, frames))
                 self.importTable.setModel(self.frameList[self.selectedFrameIndex])
 
 
