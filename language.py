@@ -16,6 +16,8 @@ class Language():
             newAction       = "Add Row"
             deleteAction    = "Delete Row"
             removeTableAction = "Tabelle entfernen"
+            newColumnAction = "Add new column"
+            removeColumnAction = "Remove last column"
             saveAction      = "Save Table"
             saveAllAction   = "Save all Tables"
             backAction      = "Previous Table"
@@ -32,6 +34,8 @@ class Language():
             newHint     = "Add new row to current view" 
             deleteHint  = "Delete a row from current view"
             removeTableHint = "Remove table from list"
+            newColumnHint = "Add new column"
+            removeColumnHint = "Remove last column"
             saveHint    = "Save products to importlist"
             saveAllHint = "Save all products to importlist"
             backHint    = "Go back to previous table"
@@ -47,6 +51,18 @@ class Language():
         class Label():
             variantsLabel = "Variants"
             categoryLabel = "Category"
+        
+        class ProductTable(enum.Enum):
+            Image   = 0
+            Number  = 1
+            Name    = 2
+            PriceNetto = 3
+            PriceBrutto = 4
+            Amount = 5
+            InStock = 6
+            MinPurchase   = 7
+            Manufacturer = 8
+            Description = 9
         
         class Menu():
             file    = "File"
@@ -68,6 +84,11 @@ class Language():
             Description     = 6
             MinimumPurchase = 7
             Ignore          = 8
+        
+        class ImportSelectionError():
+            KeyErrorP1 = "Columntitle'" 
+            KeyErrorP2 = "' is missing in table: "
+        
             
         
     class German():
@@ -83,6 +104,8 @@ class Language():
             newAction       = "Neue Reihe"
             deleteAction    = "Reihe löschen"
             removeTableAction = "Tabelle entfernen"
+            newColumnAction = "Neue Spalte hinzufügen"
+            removeColumnAction = "Letzte Spalte entfernen"
             saveAction      = "Tabelle speichern"
             saveAllAction   = "Alle Tabellen speichern"
             backAction      = "Vorherige Tabelle"
@@ -99,6 +122,9 @@ class Language():
             newHint     = "Neue Reihe der aktuellen Ansicht hinzufügen"
             deleteHint  = "Reihe aus aktueller Ansicht entfernen"
             removeTableHint = "Entferne Tabelle aus der aktuellen liste"
+            newColumnHint = "Neue Spalte hinzufügen"
+            removeColumnHint = "Letzte Spalte entfernen"
+            removeColumnHint = "Letzte Spalte entfernen"
             saveHint    = "Tabelle in Importliste speichern"
             saveAllHint = "Alle Tabellen in Importliste speichern"
             backHint    = "Gehe zurück zur vorherigen Tabelle"
@@ -115,10 +141,35 @@ class Language():
             variantsLabel = "Varianten"
             categoryLabel = "Kategorien"
         
+        class ProductTable():
+            image   = "Bild"
+            number  = "Nummer"
+            name    = "Name"
+            priceNetto = "PreisNetto"
+            priceBrutto = "PreisBrutto"
+            amount = "Anzahl"
+            stock = "Im Lager"
+            minPurchase   = "Min.Kauf"
+            manufacturer = "Hersteller"
+            description = "Beschreibung"
+        
+        class ProductTable(enum.Enum):
+            Bild        = 0
+            Nummer      = 1
+            Name        = 2
+            PreisNetto  = 3
+            PreisBrutto = 4
+            Anzahl      = 5
+            AufLager    = 6
+            MinKaufen   = 7
+            Hersteller  = 8
+            Beschreibung = 9
+        
         class Menu():
             file    = "Datei"
             table   = "Tabelle"
             help    = "Hilfe"
+
         
         class Tabs():
             data    = "Katalog öffnen"
@@ -135,6 +186,14 @@ class Language():
             Beschreibung    = 6
             Mindestabnahme  = 7
             Ignorieren      = 8
+        
+        class ImportSelectionError():
+            KeyErrorP1 = "Spaltentitel '" 
+            KeyErrorP2 = "' fehlt in Tabelle: "
+            ValueError1 = " has no value and is being skipped, Table: "
+            ValueError2 = " , row: "
+            ConvertError1 = "Could not convert"
+            ConvertError2 = "for product: "
 
 class TranslationLanguages(enum.Enum):
     English = "en"
