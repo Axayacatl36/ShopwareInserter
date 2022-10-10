@@ -1,27 +1,32 @@
-from cProfile import label
+import copy
 from decimal import Decimal
 import string
 import sys
 import threading
+from unicodedata import category
 import tabula
 import pandas as pd
 import typing
+import json
 
 from PyQt6.QtCore  import *
 from PyQt6.QtWidgets import *
 from PyQt6.QtGui import *
 
 from lib_shopware6_api import *
+from lib_shopware6_api import sub_product
 from my_shop_config import ConfShopware6ApiBase
 from googletrans import Translator
 
 from language import *
+import urllib.request
 
 class PercentageWorker(QObject):
     started = pyqtSignal()
     finished = pyqtSignal()
     percentageChanged = pyqtSignal(int)
     sendMessage = pyqtSignal(str)
+    sendingObject = pyqtSignal(object)
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -46,6 +51,9 @@ class PercentageWorker(QObject):
 
     def finish(self):
         self.finished.emit()
+    
+    def sendObject(self, object):
+        self.sendingObject.emit(object)
 
 
 class FakeWorker:
@@ -56,6 +64,9 @@ class FakeWorker:
         pass
 
     def finish(self):
+        pass
+    
+    def sendObject(self, object):
         pass
 
     @property
@@ -79,11 +90,13 @@ class ProgressBar(QWidget):
     def finished(self):
         self.progress.hide()
 
-    def launch(self, long_running_function, args=[]):
+    def launch(self, long_running_function, args=[], connectSendObject=None):
         worker = PercentageWorker()
         worker.sendMessage.connect(self.mainWindow.printMessage)
         worker.started.connect(self.start)
         worker.finished.connect(self.finished)
+        if connectSendObject:
+            worker.sendingObject.connect(connectSendObject)
         worker.percentageChanged.connect(self.progress.setValue)
         threading.Thread(
             target=long_running_function,
@@ -93,6 +106,52 @@ class ProgressBar(QWidget):
         ).start()
 
 class Product(QStandardItem):
+    class LabelImage(QLabel):
+        def __init__(self, title, parent = None,):
+            super().__init__(title, parent)
+            self._parent = parent
+            self.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            # self.setText('\n\n Drop Image Here \n\n')
+            self.setStyleSheet('''
+                QLabel{
+                    border: 4px dashed #aaa
+                }
+            ''')
+            self.setText("")
+            self.setScaledContents(True)
+            self.setAcceptDrops(True)
+
+        def setPixmap(self, image):
+            super().setPixmap(image)
+
+        def dragEnterEvent(self, event):
+            if event.mimeData().hasImage:
+                event.accept()
+            else:
+                event.ignore()
+
+        def dragMoveEvent(self, event):
+            if event.mimeData().hasImage:
+                event.accept()
+            else:
+                event.ignore()
+
+        def dropEvent(self, event):
+            if event.mimeData().hasImage:
+                try:
+
+                    event.setDropAction(Qt.DropAction.CopyAction)
+                    file_path = event.mimeData().urls()[0]
+                    if file_path.isLocalFile():
+                        print("Local Files are not supported at the moment")
+                    else:
+                        data = urllib.request.urlopen(file_path.toString()).read()
+                        pixmap = QPixmap()
+                        pixmap.loadFromData(data)
+                        self.setPixmap(pixmap)
+                        self._parent.setProductUrl(file_path.toString(), self)
+                except:
+                    print("invalid Link")
 
     def __init__(self,
         productNumber: Union[int, str],
@@ -102,10 +161,9 @@ class Product(QStandardItem):
         manufacturer: string = "",
         category: list = [],
         font_size=6, color=QColor(0, 0, 0)):
-
+        
         super().__init__()
-        self.fnt = QFont('Open Sans', font_size)
-        self.setFont(self.fnt)
+        self.setFont(QFont('Open Sans', font_size))
         self.productName    = productName
         self.productNumber  = productNumber
         self.priceBrutto    = priceBrutto
@@ -119,6 +177,7 @@ class Product(QStandardItem):
         self.description    = None
         self._amount = Decimal(1)
         self.variants: list = []
+        self.imageUrl = ""
 
         self.existsOnline = False
         self.productNameOnline  = None
@@ -130,9 +189,37 @@ class Product(QStandardItem):
         self.minimumPurchaseOnline = None
         self.descriptionOnline  = None
 
-        self.imageUrl = None
         self.uploadFlag = False
         self.uploadedFlag = False
+    
+    def deepcopy(self): 
+        _copy = Product(productNumber=copy.deepcopy(self.productNumber), productName=copy.deepcopy(self.productName))
+        _copy.priceBrutto   = copy.deepcopy(self.priceBrutto    )
+        _copy.priceNetto    = copy.deepcopy(self.priceNetto     )
+        _copy.priceBruttoRaw = copy.deepcopy(self.priceBruttoRaw)
+        _copy.priceNettoRaw = copy.deepcopy(self.priceNettoRaw  )
+        _copy.manufacturer  = copy.deepcopy(self.manufacturer   )
+        _copy.category      = copy.deepcopy(self.category       )
+        _copy.stock         = copy.deepcopy(self.stock          )
+        _copy.minimumPurchase = copy.deepcopy(self.minimumPurchase)
+        _copy.description   = copy.deepcopy(self.description    )
+        _copy.amount       = copy.deepcopy(self.amount        )
+        _copy.variants      = copy.deepcopy(self.variants       )
+
+        _copy.existsOnline          = copy.deepcopy(self.existsOnline         )
+        _copy.productNameOnline     = copy.deepcopy(self.productNameOnline    )
+        _copy.priceBruttoOnline     = copy.deepcopy(self.priceBruttoOnline    )
+        _copy.priceNettoOnline      = copy.deepcopy(self.priceNettoOnline     )
+        _copy.manufacturerOnline    = copy.deepcopy(self.manufacturerOnline   )
+        _copy.categoryOnline        = copy.deepcopy(self.categoryOnline       )
+        _copy.stockOnline           = copy.deepcopy(self.stockOnline          )
+        _copy.minimumPurchaseOnline = copy.deepcopy(self.minimumPurchaseOnline)
+        _copy.descriptionOnline     = copy.deepcopy(self.descriptionOnline    )
+
+        _copy.imageUrl = copy.deepcopy(self.imageUrl)
+        _copy.uploadFlag = copy.deepcopy(self.uploadFlag)
+        _copy.uploadedFlag = copy.deepcopy(self.uploadedFlag)
+        return _copy
     
     @property
     def priceBruttoRaw(self):
@@ -140,8 +227,9 @@ class Product(QStandardItem):
     @priceBruttoRaw.setter
     def priceBruttoRaw(self, value: Decimal):
         self._priceBruttoRaw = value
-        if self._amount:
-            self.priceBrutto = self._priceBruttoRaw/self._amount
+        if self.amount:
+            self.priceBrutto = (self._priceBruttoRaw/self.amount + Decimal("0.005")).__round__(2)
+
     
     @property
     def priceNettoRaw(self):
@@ -149,8 +237,8 @@ class Product(QStandardItem):
     @priceNettoRaw.setter
     def priceNettoRaw(self, value: Decimal):
         self._priceNettoRaw = value
-        if self._amount:
-            self.priceNetto = self._priceNettoRaw/self._amount
+        if self.amount:
+            self.priceNetto = (self._priceNettoRaw/self.amount + Decimal("0.005")).__round__(2)
     
     @property
     def amount(self):
@@ -159,9 +247,9 @@ class Product(QStandardItem):
     def amount(self, value: Decimal):
         self._amount = value
         if self.priceNettoRaw:
-            self.priceNetto = self.priceNettoRaw/self.amount
+            self.priceNetto = (self.priceNettoRaw/self.amount + Decimal("0.005")).__round__(2)
         if self.priceBruttoRaw:
-            self.priceBrutto = self.priceBruttoRaw/self.amount
+            self.priceBrutto = (self.priceBruttoRaw/self.amount + Decimal("0.005")).__round__(2)
 
     def productPayload(self, ADMIN_API: Shopware6API) -> dict:
         # id und number sind schon gesetzt
@@ -190,6 +278,11 @@ class Product(QStandardItem):
         payload["minPurchase"] = int(self.minimumPurchase)
         payload["description"] = self.description
         payload["active"] = True
+        categorysPayload = []
+        for cat in self.category:
+            categorysPayload.append({"id":cat})
+        print(categorysPayload)
+        payload["categories"] = categorysPayload
         return payload
 
 class EditableHeaderView(QHeaderView):
@@ -326,7 +419,6 @@ class ImportTableModel(QAbstractTableModel):
             self._data.drop(index=row, inplace=True)
             if reset_index:
                 self._data.reset_index(drop=True, inplace=True)
-            # print(f"removed row {row}")
         else:
             print(f"no row {row}")
             print(f"index is: {self._data.index}")
@@ -366,7 +458,7 @@ class TableImport(QTableView):
         self.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
         self.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
         self.setDragDropMode(QAbstractItemView.DragDropMode.InternalMove)
-        self.setDragDropOverwriteMode(False)
+        self.setDragDropOverwriteMode(True)
         self.setDragEnabled(True)
         self.setStyle(self.DropmarkerStyle())
         self.setHorizontalHeader(EditableHeaderView(orientation=Qt.Orientation.Horizontal, Mainwindow=self.MainWindow))
@@ -381,10 +473,21 @@ class TableImport(QTableView):
     def removeSelectedRows(self):
         self.model().removeRowsList(self.selectionModel().selectedRows()) if self.model() else None
     
+    def dragEnterEvent(self, event):
+        if event.mimeData():
+            event.accept()
+        else:
+            event.ignore()
+    
+    def dragMoveEvent(self, event):
+        if event.mimeData():
+            event.accept()
+        else:
+            event.ignore()
+    
     def dropEvent(self, event):
         if (event.source() is not self or
-            (event.dropAction() != Qt.DropAction.CopyAction and
-             self.dragDropMode() != QAbstractItemView.DragDropMode.InternalMove)):
+            (event.dropAction() != Qt.DropAction.CopyAction)):
             super().dropEvent(event)
 
         selection = self.selectedIndexes()
@@ -393,7 +496,7 @@ class TableImport(QTableView):
         if (0 <= from_index < self.model().rowCount() and
             0 <= to_index < self.model().rowCount() and
             from_index != to_index):
-            self.model().relocateRow(from_index, to_index)
+            # self.model().relocateRow(from_index, to_index)
             event.accept()
         super().dropEvent(event)
         self.setCurrentIndex(self.model().index(to_index+1, 0))
@@ -426,7 +529,7 @@ class ProductTableModel(QAbstractTableModel):
                 elif index.column() == 4:   # priceBrutto
                     return str(product.priceBrutto)
                 elif index.column() == 5:   # amount
-                    return int(product.amount)
+                    return str(product.amount)
                 elif index.column() == 6:   # stock
                     return int(product.stock)
                 elif index.column() == 7:   # min purchase
@@ -436,6 +539,11 @@ class ProductTableModel(QAbstractTableModel):
                     return str(product.manufacturer)
                 elif index.column() == 9:   # description
                     return str(product.description)
+            elif role == Qt.ItemDataRole.BackgroundRole:
+                if self._data[index.row()].uploadedFlag:
+                    return QColor("green")
+                elif self._data[index.row()].uploadFlag:
+                    return QColor("orange")
         return None
 
     def setData(self, index, value, role):
@@ -455,8 +563,9 @@ class ProductTableModel(QAbstractTableModel):
                     if Decimal(value) >= 0:
                         product.priceBrutto = Decimal(value)
                 elif index.column() == 5:   # amount
-                    product.amount = Decimal(value)
-                    self.layoutChanged.emit()
+                    if Decimal(value) >= 0:
+                        product.amount = Decimal(value)
+                        self.layoutChanged.emit()
                 elif index.column() == 6:   # stock
                     product.stock = value
                 elif index.column() == 7:   # min purchase
@@ -500,11 +609,11 @@ class ProductTableModel(QAbstractTableModel):
     def relocateRow(self, row_source, row_target) -> None:
         row_a, row_b = max(row_source, row_target), min(row_source, row_target)
         self.beginMoveRows(QModelIndex(), row_a, row_a, QModelIndex(), row_b)
-        self._data.insert(row_target,self._data.pop(row_source))
+        self._data.insert(row_target, self._data.pop(row_source))
         self.endMoveRows()
     
     def removeRow(self, row):
-        if row >= len(self._data):
+        if row < len(self._data):
             self._data.pop(row)
             self.layoutChanged.emit()
         else:
@@ -513,12 +622,14 @@ class ProductTableModel(QAbstractTableModel):
     def removeRows(self, row: int, count: int, parent: QModelIndex = None):
         del self._data[row: row + count]
         self.layoutChanged.emit()
+        return True
     
     def newRow(self):
         for product in self._data:
             if product.productNumber == "0":
                 return
-        self._data.append(Product("0"))
+        self.append(Product("0"))
+        self.parent().addIndexWidget()
         self.layoutChanged.emit()
     
     def getProducts(self):
@@ -535,44 +646,226 @@ class TableProducts(QTableView):
                     option_new.rect.setRight(widget.width())
                 option = option_new
             super().drawPrimitive(element, option, painter, widget)
+    class Delegate(QItemDelegate):
+        def __init__(self, parent=None):
+            QItemDelegate.__init__(self, parent)
+
+        def setEditorData(self, editor, index):
+            if index.column() == 6 or index.column() == 7:
+                editor.setValue(index.data(Qt.ItemDataRole.DisplayRole))
+                editor.setMinimum(0)
+            
 
     def __init__(self, MainWindow, parent = None):
         QTableView.__init__(self, parent)
         self.MainWindow = MainWindow
         self.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
-        self.setDragDropMode(QAbstractItemView.DragDropMode.InternalMove)
-        self.setDragDropOverwriteMode(False)
-        self.setDragEnabled(True)
+        self.setDragDropMode(QAbstractItemView.DragDropMode.DragDrop)
+        self.setAcceptDrops(True)
+
         self.setStyle(self.DropmarkerStyle())
         self.setSizeAdjustPolicy(QAbstractScrollArea.SizeAdjustPolicy.AdjustToContents)
         self.setModel(ProductTableModel(MainWindow=self.MainWindow))
         self.horizontalHeader().resizeSections(QHeaderView.ResizeMode.ResizeToContents)
+        self.setItemDelegateForColumn(6, self.Delegate(self))
+        self.setItemDelegateForColumn(7, self.Delegate(self))
+        self.verticalHeader().setDefaultSectionSize(45)
+        self.indexWidgets = []
     
     def contextMenuEvent(self, event):
         menu = QMenu()
-        delRow = menu.addAction("Delete selected Rows")
-        delRow.triggered.connect(self.removeSelectedRows)
+        flagForUpload = menu.addAction("Zum hochladen freigeben")
+        flagForUpload.triggered.connect(self.flagForUpload)
+        flagNotForUpload = menu.addAction("Nicht mehr freigeben")
+        flagNotForUpload.triggered.connect(self.flagNotForUpload)
         menu.exec(self.mapToGlobal(event.pos()))
+    
+    def flagForUpload(self):
+        for index in self.selectionModel().selectedRows():
+            self.model()._data[index.row()].uploadFlag = True
+            self.model()._data[index.row()].uploadedFlag = False
+        self.model().layoutChanged.emit()
+    
+    def flagNotForUpload(self):
+        for index in self.selectionModel().selectedRows():
+            self.model()._data[index.row()].uploadFlag = False
+        self.model().layoutChanged.emit()
+
     
     def removeSelectedRows(self):
         self.model().removeRowsList(self.selectionModel().selectedRows()) if self.model() else None
     
-    def dropEvent(self, event):
-        if (event.source() is not self or
-            (event.dropAction() != Qt.DropAction.CopyAction and
-             self.dragDropMode() != QAbstractItemView.DragDropMode.InternalMove)):
-            super().dropEvent(event)
-
+    def updateProductImages(self):
+        for product in self.model()._data:
+            if product.imageUrl:
+                data = urllib.request.urlopen(product.imageUrl).read()
+                pixmap = QPixmap()
+                pixmap.loadFromData(data)
+                self.indexWidgets[self.model()._data.index(product)].setPixmap(pixmap)
+            else:
+                self.indexWidgets[self.model()._data.index(product)].clear()
+    
+    def setProductUrl(self, file_path, label):
+        self.model()._data[self.indexWidgets.index(label)].imageUrl=file_path
+    
+    def addIndexWidget(self):
+        self.indexWidgets.append(Product.LabelImage(str(len(self.indexWidgets)), self))
+        self.setIndexWidget(self.model().index(len(self.indexWidgets)-1,0), self.indexWidgets[-1])
+    
+    def dragMoveEvent(self, event):
         selection = self.selectedIndexes()
         from_index = selection[0].row() if selection else -1
         to_index = self.indexAt(event.position().toPoint()).row()
-        if (0 <= from_index < self.model().rowCount() and
-            0 <= to_index < self.model().rowCount() and
-            from_index != to_index):
-            self.model().relocateRow(from_index, to_index)
+        if from_index != to_index:
             event.accept()
-        super().dropEvent(event)
-        self.setCurrentIndex(self.model().index(to_index+1, 0))
+        else:
+            event.ignore()
+    
+    def dropEvent(self, event):
+        if (event.source() is not self # or
+            # (event.dropAction() != Qt.DropAction.CopyAction and
+            #  self.dragDropMode() != QAbstractItemView.DragDropMode.InternalMove)
+             ):
+            event.accept()
+            source_Widget=event.source()
+            for product in (source_Widget.model()._data[index.row()] for index in source_Widget.selectionModel().selectedRows()):
+                # source_Widget.takeItem(source_Widget.indexFromItem(i).row())
+                source_Widget.model()._data.remove(product)
+                self.model().append(product)
+                # to_index = self.indexAt(event.position().toPoint()).row()
+                # if to_index >=0:
+                #     self.model().relocateRow(self.model().rowCount()-1, to_index)
+                source_Widget.model().layoutChanged.emit()
+        else:
+            selection = self.selectedIndexes()
+            from_index = selection[0].row() if selection else -1
+            to_index = self.indexAt(event.position().toPoint()).row()
+            self.model()._data[to_index].variants.append(self.model()._data.pop(from_index))
+            self.updateProductImages()
+            self.model().layoutChanged.emit()
+
+            
+        self.updateProductImages()
+        self.model().layoutChanged.emit()   
+    
+    def append(self, product: "Product"):
+        newcopy = product.deepcopy()
+        if product not in self.model()._data:
+            self.model().append(newcopy)
+            self.addIndexWidget()
+        else:
+            self.model()._data[self.model()._data.index(product)] = newcopy
+        self.model().layoutChanged.emit()
+
+class VariantListModel(QAbstractListModel):
+    def __init__(self):
+        super().__init__()
+        self._data: typing.List["Product"] = []
+
+    def rowCount(self, index=0):
+        return len(self._data)
+
+    def data(self, index, role=Qt.ItemDataRole.DisplayRole):
+        if index.isValid():
+            if role == Qt.ItemDataRole.DisplayRole or role == Qt.ItemDataRole.EditRole:
+                return str(self._data[index.row()].productName)
+        return None
+
+    def setData(self, index, value, role):
+        if role == Qt.ItemDataRole.EditRole:
+            return self._data[index.row()]
+        return False
+    
+    def append(self, product: "Product"):
+        self._data.append(product)
+        self.layoutChanged.emit()
+
+    def flags(self, index: QModelIndex):
+        if not index.isValid():
+            return Qt.ItemFlag.ItemIsDropEnabled
+        if index.row() < self.rowCount():
+            return Qt.ItemFlag.ItemIsEnabled | Qt.ItemFlag.ItemIsEditable | Qt.ItemFlag.ItemIsSelectable | Qt.ItemFlag.ItemIsDragEnabled
+        return Qt.ItemFlag.ItemIsEnabled | Qt.ItemFlag.ItemIsEditable
+    
+    def supportedDragActions(self):
+        return Qt.DropAction.MoveAction | Qt.DropAction.CopyAction
+    
+    def supportedDropActions(self) -> bool:
+        return Qt.DropAction.MoveAction | Qt.DropAction.CopyAction
+    
+    def relocateRow(self, row_source, row_target) -> None:
+        row_a, row_b = max(row_source, row_target), min(row_source, row_target)
+        self.beginMoveRows(QModelIndex(), row_a, row_a, QModelIndex(), row_b)
+        self._data.insert(row_target, self._data.pop(row_source))
+        self.endMoveRows()
+
+class ListVariants(QListView):
+    def __init__(self):
+        super(ListVariants,self).__init__()
+        self.setDragDropMode(QAbstractItemView.DragDropMode.DragDrop)
+        self.setAcceptDrops(False)
+        self.setDragEnabled(True)
+        self.setModel(VariantListModel())
+
+
+    def dropEvent(self, QDropEvent):
+        source_Widget=QDropEvent.source()
+        for i in (source_Widget.model()._data[index.row()] for index in source_Widget.selectionModel().selectedRows()):
+            # source_Widget.takeItem(source_Widget.indexFromItem(i).row())
+            source_Widget.model()._data.remove(i)
+            self.model().append(i)
+        source_Widget.updateProductImages()
+        source_Widget.model().layoutChanged.emit()
+
+class ListCategoryItem(QStandardItem):
+    def __init__(self, name: str):
+        super().__init__(name)
+        self.id = ""
+
+
+class ListCategory(QListView):
+    class Delegate(QStyledItemDelegate):
+        def editorEvent(self, event, model, option, index):
+            checked = index.data(Qt.ItemDataRole.CheckStateRole)
+            ret = QStyledItemDelegate.editorEvent(self, event, model, option, index)
+            if checked != index.data(Qt.ItemDataRole.CheckStateRole):
+                self.parent().updateProduct(index)
+            return ret
+
+    def __init__(self, ADMIN_API: Shopware6API):
+        super(ListCategory,self).__init__()
+        self.ADMIN_API = ADMIN_API
+        model = QStandardItemModel()
+        self.selectedProduct = None
+        self.setModel(model)
+        self.setItemDelegate(self.Delegate(self))
+        # self.model().setSortRole(Qt.ItemDataRole.CheckStateRole)
+    
+    def setProduct(self, product: "Product"):
+        self.selectedProduct = product
+        self.model().removeRows( 0, self.model().rowCount())
+        for category in self.ADMIN_API.product._admin_client.request_get(f"category", dict())["data"]:
+            item = ListCategoryItem(str(category["name"]).strip())
+            item.id = str(category["id"])
+            if  item.id not in self.selectedProduct.category:
+                item.setCheckState(Qt.CheckState.Unchecked)
+            else:
+                item.setCheckState(Qt.CheckState.Checked)
+            item.setCheckable(True)
+            self.model().appendRow(item)
+        self.model().sort(0, Qt.SortOrder.AscendingOrder)
+    
+    def updateProduct(self, index):
+        item = self.model().itemFromIndex(index)
+        if item.checkState() == Qt.CheckState.Checked:
+            if item.id not in self.selectedProduct.category:
+                self.selectedProduct.category.append(item.id)
+        else:
+            if item.id in self.selectedProduct.category:
+                self.selectedProduct.category.remove(item.id)
+    
+    
+
 
 
 class Ui_MainWindow(object):
@@ -584,6 +877,7 @@ class Ui_MainWindow(object):
         self.frameList = []
         self.continuosMode = False
         self.ADMIN_API: Shopware6API = Shopware6API(config=ConfShopware6ApiBase())
+        self.trans = Translator()
     
     def setupUi(self):
         self.MainWindow.setWindowTitle(self.language.WindowTitle)
@@ -629,14 +923,15 @@ class Ui_MainWindow(object):
         self.productItemsLayout = QHBoxLayout()
         self.productLayout.addLayout(self.productItemsLayout)
         self.productTable = TableProducts(self, self.tab_Products)
+        self.productTable.clicked.connect(self.productTableSelectionChanged)
         self.productItemsLayout.addWidget(self.productTable)
         self.productListLayout = QVBoxLayout()
         self.productItemsLayout.addLayout(self.productListLayout)
         self.variantLabel = QLabel(self.language.Label.variantsLabel)
-        self.variantsList = QListWidget()
+        self.variantsList = ListVariants()
         self.variantsList.setMaximumWidth(300)
         self.categoryLabel = QLabel(self.language.Label.categoryLabel)
-        self.categoryList = QListWidget()
+        self.categoryList = ListCategory(self.ADMIN_API)
         self.categoryList.setMaximumWidth(300)
         self.productListLayout.addWidget(self.variantLabel)
         self.productListLayout.addWidget(self.variantsList)
@@ -650,7 +945,6 @@ class Ui_MainWindow(object):
         self.tab_Detail = QWidget()
         self.tabGroup.addTab(self.tab_Detail, self.language.Tabs.detail)
         self.tabGroup.setTabEnabled(2, False)
-
 
     
     def _createActions(self):
@@ -696,6 +990,12 @@ class Ui_MainWindow(object):
         self.saveAction.setToolTip(self.language.Hints.saveHint)
         self.saveAllAction.setToolTip(self.language.Hints.saveAllHint)
         self.uploadAction.setToolTip(self.language.Hints.uploadHint)
+    
+    def productTableSelectionChanged(self):
+        if self.productTable.selectionModel().selectedRows():
+            self.variantsList.model()._data = self.productTable.model()._data[self.productTable.selectionModel().selectedRows()[0].row()].variants
+            self.categoryList.setProduct(self.productTable.model()._data[self.productTable.selectionModel().selectedRows()[0].row()])
+            self.variantsList.model().layoutChanged.emit()
 
     def _createMenuBar(self):
         menuBar = self.MainWindow.menuBar()
@@ -752,10 +1052,10 @@ class Ui_MainWindow(object):
         self.nextAction.triggered.connect(self.next_table)
         self.continuosAction.triggered.connect(self.togglecontinuosMode)
         self.saveAction.triggered.connect(self.importPandasTable)
-        self.saveAllAction
+        self.saveAllAction.triggered.connect(self.importPandasTableAll)
         # Shopware Actions
-        self.translateAction
-        self.uploadAction
+        self.translateAction.triggered.connect(self.translateSelection)
+        self.uploadAction.triggered.connect(self.uploadProductsWrapper)
         # Exit Action
         self.exitAction
         # Help Action
@@ -848,9 +1148,38 @@ class Ui_MainWindow(object):
             self.continuosAction.setText(self.language.Actions.continuosModeAction)
             self.continuosAction.setToolTip(self.language.Hints.continuosModeHint)
     
+    def translateSelection(self):
+        selectedProducts = list((self.productTable.model()._data[index.row()] for index in self.productTable.selectionModel().selectedRows()))
+
+        if selectedProducts:
+            translation = self.trans.translate(list(product.productName for product in selectedProducts), dest=TranslationLanguages[self.translationLanguageComboBox.currentText()].value)
+            print(selectedProducts)
+            for product, productNameTranslation in  zip(selectedProducts, translation):
+                product.productName = productNameTranslation.text
+                print(productNameTranslation.text)
+            self.productTable.model().layoutChanged.emit()
+            
+
+
+        
+    
+    # def addProduct(self, product):
+        # for product in self.productTable.model().getProducts():
+        #     print("setting label")
+            # self.productTable.setIndexWidget(self.productTable.model().index(self.productTable.model()._data.index(product),0), product.image)
+            # self.productTable.model().layoutChanged.emit()
+        # self.productTable.
+    
     def importPandasTable(self):
         if self.importTable.model():
-            self.progressBar.launch(self.importProducts)
+            self.progressBar.launch(self.importProducts, connectSendObject=self.productTable.append)
+    
+    def importPandasTableAll(self):
+        if self.importTable.model():
+            self.progressBar.launch(self.importProductsAll, connectSendObject=self.productTable.append)
+
+    def importProductsAll(self, worker, allTables: bool = False):
+        self.importProducts(worker, allTables= True)
     
     def importProducts(self, worker, allTables: bool = False):
         if worker is None:
@@ -895,7 +1224,6 @@ class Ui_MainWindow(object):
                 if product == None:
                     product = Product(row[productNumberLang])
                     # add product to list of products
-                    self.productTable.model().append(product)
                     if self.ADMIN_API.product.is_product_number_existing(product.productNumber):
                         product.existsOnline = True
                         # get online product data
@@ -908,6 +1236,7 @@ class Ui_MainWindow(object):
                         product.minimumPurchaseOnline = Decimal(str(product_online["minPurchase"]))
                         product.descriptionOnline   = str(product_online["description"])
                         product.stockOnline         = Decimal(str(product_online["availableStock"]))
+                        product.category            = list(product_online["categoryIds"])
                 
                 ## fill product with data
                 # productname
@@ -949,8 +1278,8 @@ class Ui_MainWindow(object):
                 if self.language.ImportSelection(6).name in row.keys():
                     product.description = row[self.language.ImportSelection(6).name]
                 worker.percentage += 1
+                worker.sendObject(product)
         worker.finish()
-        self.productTable.model().layoutChanged.emit()
     
     def searchChildProducts(self, children: typing.List["Product"], productNumber):
         for child in children:
@@ -960,6 +1289,38 @@ class Ui_MainWindow(object):
 
     def printMessage(self, message:str, duration = 10000):
         self.statusbar.showMessage(message, duration)
+    
+    def uploadProductsWrapper(self):
+        self.progressBar.launch(self.uploadProducts, connectSendObject=self.productTable.append)
+    
+    def uploadProducts(self, worker):
+        try:
+            if worker is None:
+                worker = FakeWorker()
+            worker.percentage = 0
+            self.progressBar.progress.setMaximum(len(self.productTable.model()._data))
+            for dictionary in self.ADMIN_API._admin_client.request_get("sales-channel")["data"]:
+                if dictionary["name"].lower() == "praga-kart.de":
+                    salesChannelId = str(dictionary["id"])
+                    break
+
+        except:
+            worker.printMessage("Couldnt find sales channel")
+        else:
+            worker.start()
+            for product in self.productTable.model()._data:
+                if product.uploadFlag:
+                    payload = product.productPayload(self.ADMIN_API)
+                    payload["visibilities"] = [{ "id": payload["taxId"], "salesChannelId": salesChannelId, "visibility": 30 }]
+                    self.ADMIN_API.product.upsert_product_payload(str(product.productNumber), payload)
+                    if product.imageUrl:
+                        self.ADMIN_API.product.upsert_product_pictures(product_number=product.productNumber, l_product_pictures=[sub_product.ProductPicture(url=product.imageUrl, position=5)])
+                    product.uploadFlag = False
+                    product.uploadedFlag = True
+                    worker.sendObject(product)
+                worker.percentage+=1
+            worker.printMessage("Produkte hochgeladen")
+            worker.finish()
 
 
 
