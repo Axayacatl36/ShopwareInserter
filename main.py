@@ -1314,7 +1314,12 @@ class Ui_MainWindow(object):
                     payload["visibilities"] = [{ "id": payload["taxId"], "salesChannelId": salesChannelId, "visibility": 30 }]
                     self.ADMIN_API.product.upsert_product_payload(str(product.productNumber), payload)
                     if product.imageUrl:
-                        self.ADMIN_API.product.upsert_product_pictures(product_number=product.productNumber, l_product_pictures=[sub_product.ProductPicture(url=product.imageUrl, position=5)])
+                        try:
+                            self.ADMIN_API.product.upsert_product_pictures(product_number=product.productNumber, l_product_pictures=[sub_product.ProductPicture(url=product.imageUrl, position=5)])
+                        except:
+                            worker.printMessage("Fehler beim hochladen des Bildes, vermutlich ist der Bild link komisch")
+                            worker.percentage+=1
+                            continue
                     product.uploadFlag = False
                     product.uploadedFlag = True
                     worker.sendObject(product)
