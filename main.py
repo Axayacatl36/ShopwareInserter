@@ -1,9 +1,13 @@
+import packaging
+import packaging.version
+import packaging.specifiers
+import packaging.requirements
+
 import copy
 from decimal import Decimal
 import string
 import sys
 import threading
-from unicodedata import category
 import tabula
 import pandas as pd
 import typing
@@ -20,6 +24,16 @@ from googletrans import Translator
 
 from language import *
 import urllib.request
+
+def resource_path(relative_path):
+    """ Get absolute path to resource, works for dev and for PyInstaller """
+    try:
+        # PyInstaller creates a temp folder and stores path in _MEIPASS
+        base_path = sys._MEIPASS
+    except Exception:
+        base_path = os.path.abspath(".")
+
+    return os.path.join(base_path, relative_path)
 
 class PercentageWorker(QObject):
     started = pyqtSignal()
@@ -151,7 +165,7 @@ class Product(QStandardItem):
                         self.setPixmap(pixmap)
                         self._parent.setProductUrl(file_path.toString(), self)
                 except:
-                    print("invalid Link")
+                        print("invalid Link")
 
     def __init__(self,
         productNumber: Union[int, str],
@@ -172,7 +186,7 @@ class Product(QStandardItem):
         self._priceNettoRaw  = Decimal(0)
         self.manufacturer   = manufacturer
         self.category       = category
-        self.stock          = Decimal("0.00")
+        self.stock          = Decimal("10.00")
         self.minimumPurchase = Decimal("1.00")
         self.description    = None
         self._amount = Decimal(1)
@@ -281,7 +295,6 @@ class Product(QStandardItem):
         categorysPayload = []
         for cat in self.category:
             categorysPayload.append({"id":cat})
-        print(categorysPayload)
         payload["categories"] = categorysPayload
         return payload
 
@@ -870,7 +883,7 @@ class ListCategory(QListView):
 
 class Ui_MainWindow(object):
     def __init__(self, MainWindow: QMainWindow, language: Language = Language.English):
-        QDir.addSearchPath('icons', os.path.dirname(os.path.realpath(__file__))+r"\resources")
+        # QDir.addSearchPath('icons', resource_path("resources"))
         self.language = Language.German
         self.MainWindow = MainWindow
         self.selectedFrameIndex = 0
@@ -949,26 +962,26 @@ class Ui_MainWindow(object):
     
     def _createActions(self):
         # File Actions
-        self.openAction = QAction(QIcon("icons:file-open.png"), "&"+self.language.Actions.openAction, self.MainWindow)
+        self.openAction = QAction(QIcon(resource_path("resources/file-open.png")), "&"+self.language.Actions.openAction, self.MainWindow)
         # Table actions
-        self.newAction  = QAction(QIcon("icons:add-row.png"), "&"+self.language.Actions.newAction, self.MainWindow)
-        self.deleteAction = QAction(QIcon("icons:delete-row.png"), "&"+self.language.Actions.deleteAction, self.MainWindow)
-        self.removeTableAction  = QAction(QIcon("icons:remove-table.png"), "&"+self.language.Actions.removeTableAction, self.MainWindow)
-        self.newColumnAction    = QAction(QIcon("icons:new-column.png"), "&"+self.language.Actions.newColumnAction, self.MainWindow)
-        self.removeColumnAction = QAction(QIcon("icons:remove-column.png"), "&"+self.language.Actions.removeColumnAction, self.MainWindow)
-        self.saveAction = QAction(QIcon("icons:table-save.png"), "&"+self.language.Actions.saveAction, self.MainWindow)
-        self.saveAllAction = QAction(QIcon("icons:table-save-all.png"), "&"+self.language.Actions.saveAllAction, self.MainWindow)
-        self.backAction = QAction(QIcon("icons:back.png"), "&"+self.language.Actions.backAction, self.MainWindow)
-        self.nextAction = QAction(QIcon("icons:next.png"), "&"+self.language.Actions.nextAction, self.MainWindow)
-        self.continuosAction = QAction(QIcon("icons:continuos-mode-dark.png"), "&"+self.language.Actions.continuosModeAction, self.MainWindow)
+        self.newAction  = QAction(QIcon(resource_path("resources/add-row.png")), "&"+self.language.Actions.newAction, self.MainWindow)
+        self.deleteAction = QAction(QIcon(resource_path("resources/delete-row.png")), "&"+self.language.Actions.deleteAction, self.MainWindow)
+        self.removeTableAction  = QAction(QIcon(resource_path("resources/remove-table.png")), "&"+self.language.Actions.removeTableAction, self.MainWindow)
+        self.newColumnAction    = QAction(QIcon(resource_path("resources/new-column.png")), "&"+self.language.Actions.newColumnAction, self.MainWindow)
+        self.removeColumnAction = QAction(QIcon(resource_path("resources/remove-column.png")), "&"+self.language.Actions.removeColumnAction, self.MainWindow)
+        self.saveAction = QAction(QIcon(resource_path("resources/table-save.png")), "&"+self.language.Actions.saveAction, self.MainWindow)
+        self.saveAllAction = QAction(QIcon(resource_path("resources/table-save-all.png")), "&"+self.language.Actions.saveAllAction, self.MainWindow)
+        self.backAction = QAction(QIcon(resource_path("resources/back.png")), "&"+self.language.Actions.backAction, self.MainWindow)
+        self.nextAction = QAction(QIcon(resource_path("resources/next.png")), "&"+self.language.Actions.nextAction, self.MainWindow)
+        self.continuosAction = QAction(QIcon(resource_path("resources/continuos-mode-dark.png")), "&"+self.language.Actions.continuosModeAction, self.MainWindow)
         # Shopware Actions
-        self.translateAction = QAction(QIcon("icons:translate.png"), "&"+self.language.Actions.translateAction, self.MainWindow)
-        self.uploadAction = QAction(QIcon("icons:upload.png"), "&"+self.language.Actions.uploadAction, self.MainWindow)
+        self.translateAction = QAction(QIcon(resource_path("resources/translate.png")), "&"+self.language.Actions.translateAction, self.MainWindow)
+        self.uploadAction = QAction(QIcon(resource_path("resources/upload.png")), "&"+self.language.Actions.uploadAction, self.MainWindow)
         # Exit Action
         self.exitAction = QAction("&Exit", self.MainWindow)
         # Help Action
-        self.helpAction = QAction(QIcon("icons:help.png"), "&"+self.language.Actions.helpAction, self.MainWindow)
-        self.changeLanguageAction = QAction(QIcon("icons:change-language.png"), "&"+self.language.Actions.changeLanguageAction, self.MainWindow)
+        self.helpAction = QAction(QIcon(resource_path("resources/help.png")), "&"+self.language.Actions.helpAction, self.MainWindow)
+        self.changeLanguageAction = QAction(QIcon(resource_path("resources/change-language.png")), "&"+self.language.Actions.changeLanguageAction, self.MainWindow)
         #Shortcuts
         self.openAction.setShortcut("Ctrl+O")
         self.newAction.setShortcut("Ctrl+N")
@@ -1139,12 +1152,12 @@ class Ui_MainWindow(object):
     def togglecontinuosMode(self):
         if self.continuosMode:
             self.continuosMode = False
-            self.continuosAction.setIcon(QIcon("icons:continuos-mode-dark.png"))
+            self.continuosAction.setIcon(QIcon(resource_path("resources/continuos-mode-dark.png")))
             self.continuosAction.setText(self.language.Actions.continuosModeActionOff)
             self.continuosAction.setToolTip(self.language.Hints.continuosModeHintOff)
         else:
             self.continuosMode = True
-            self.continuosAction.setIcon(QIcon("icons:continuos-mode.png"))
+            self.continuosAction.setIcon(QIcon(resource_path("resources/continuos-mode.png")))
             self.continuosAction.setText(self.language.Actions.continuosModeAction)
             self.continuosAction.setToolTip(self.language.Hints.continuosModeHint)
     
@@ -1153,10 +1166,8 @@ class Ui_MainWindow(object):
 
         if selectedProducts:
             translation = self.trans.translate(list(product.productName for product in selectedProducts), dest=TranslationLanguages[self.translationLanguageComboBox.currentText()].value)
-            print(selectedProducts)
             for product, productNameTranslation in  zip(selectedProducts, translation):
                 product.productName = productNameTranslation.text
-                print(productNameTranslation.text)
             self.productTable.model().layoutChanged.emit()
             
 
@@ -1192,14 +1203,14 @@ class Ui_MainWindow(object):
         else:
             steps = self.frameList[self.selectedFrameIndex].rowCount()
         self.progressBar.progress.setMaximum(steps)
-        worker.start()
+        
         if allTables:
             tableSelection = self.frameList
         else:
             tableSelection = [self.frameList[self.selectedFrameIndex]]
         
         productNumberLang = self.language.ImportSelection(1).name
-        
+        worker.start()
         for table  in tableSelection:
             if table._data.empty:
                 continue
@@ -1236,7 +1247,8 @@ class Ui_MainWindow(object):
                         product.minimumPurchaseOnline = Decimal(str(product_online["minPurchase"]))
                         product.descriptionOnline   = str(product_online["description"])
                         product.stockOnline         = Decimal(str(product_online["availableStock"]))
-                        product.category            = list(product_online["categoryIds"])
+                        if product_online["categoryIds"]:
+                            product.category            = list(product_online["categoryIds"])
                 
                 ## fill product with data
                 # productname
@@ -1277,6 +1289,9 @@ class Ui_MainWindow(object):
                 #description
                 if self.language.ImportSelection(6).name in row.keys():
                     product.description = row[self.language.ImportSelection(6).name]
+                #manufacturer
+                if self.language.ImportSelection(8).name in row.keys():
+                    product.manufacturer= row[self.language.ImportSelection(8).name]
                 worker.percentage += 1
                 worker.sendObject(product)
         worker.finish()

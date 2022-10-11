@@ -1,4 +1,6 @@
-PyQt6
-pandas
-lib_shopware6_api
-googletrans
+PyQt6==6.3.1
+pandas==1.4.3
+lib_shopware6_api==2.0.2.3
+googletrans==3.1.0a0
+tabula
+openpyxl==3.0.10

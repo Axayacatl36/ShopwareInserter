@@ -83,7 +83,8 @@ class Language():
             Stock           = 5
             Description     = 6
             MinimumPurchase = 7
-            Ignore          = 8
+            Manufacturer    = 8
+            Ignore          = 9
         
         class ImportSelectionError():
             KeyErrorP1 = "Columntitle'" 
@@ -185,7 +186,8 @@ class Language():
             Lagerbestand    = 5
             Beschreibung    = 6
             Mindestabnahme  = 7
-            Ignorieren      = 8
+            Hersteller      = 8
+            Ignorieren      = 9
         
         class ImportSelectionError():
             KeyErrorP1 = "Spaltentitel '" 

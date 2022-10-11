@@ -16,3 +16,6 @@ my_shop_config.py
 
 #ignore pycache
 __pycache__/
+dist/
+build/
+resources.zip
