@@ -3,6 +3,8 @@ import packaging.version
 import packaging.specifiers
 import packaging.requirements
 
+import validators
+
 import copy
 from decimal import Decimal
 import string
@@ -155,17 +157,25 @@ class Product(QStandardItem):
                 try:
 
                     event.setDropAction(Qt.DropAction.CopyAction)
-                    file_path = event.mimeData().urls()[0]
-                    if file_path.isLocalFile():
-                        print("Local Files are not supported at the moment")
-                    else:
-                        data = urllib.request.urlopen(file_path.toString()).read()
+                    file_path = str(event.mimeData().urls()[0].toString())
+                    if validators.url(file_path):
+                        data = urllib.request.urlopen(file_path).read()
                         pixmap = QPixmap()
                         pixmap.loadFromData(data)
-                        self.setPixmap(pixmap)
-                        self._parent.setProductUrl(file_path.toString(), self)
-                except:
+                        
+                    else:
+                        print(file_path)
+                        print("Local Files are not supported at the moment")
+                        pixmap = QPixmap(file_path.replace("file:///", ''))
+
+                    self.setPixmap(pixmap)
+                    self._parent.setProductUrl(file_path, self)
+                    
+                        
+                except Exception as e:
                         print("invalid Link")
+                        print(e)
+
 
     def __init__(self,
         productNumber: Union[int, str],
@@ -280,7 +290,6 @@ class Product(QStandardItem):
             self.priceBrutto = self.priceNetto * (1 + tax_rate / 100)
         currency_id = ADMIN_API.product.currency.get_currency_id_by_iso_code(currency_iso_code=currency_iso_code)
         # new_product_id = ADMIN_API.product.calc_new_product_id(product_number=self.productNumber)
-        manufacturer_id = ADMIN_API.product.calc_new_product_id(product_number=self.manufacturer)
         tax_id =  ADMIN_API.tax.get_tax_id_by_name(tax_name=tax_name)
         payload["name"] = self.productName
         if self.stock:
@@ -288,6 +297,7 @@ class Product(QStandardItem):
         payload["taxId"] = tax_id
         payload["price"] = [{"currencyId": currency_id, "gross": str(self.priceBrutto), "net": str(self.priceNetto), "linked": linked}]
         if self.manufacturer:
+            manufacturer_id = ADMIN_API.product.calc_new_product_id(product_number=self.manufacturer)
             payload["manufacturer"] = {"id": manufacturer_id, "name": self.manufacturer }
         payload["minPurchase"] = int(self.minimumPurchase)
         payload["description"] = self.description
@@ -891,6 +901,7 @@ class Ui_MainWindow(object):
         self.continuosMode = False
         self.ADMIN_API: Shopware6API = Shopware6API(config=ConfShopware6ApiBase())
         self.trans = Translator()
+        self.ADMIN_API.product.media.upload_media_from_url = self.upload_media_from_url
     
     def setupUi(self):
         self.MainWindow.setWindowTitle(self.language.WindowTitle)
@@ -1324,28 +1335,55 @@ class Ui_MainWindow(object):
         else:
             worker.start()
             for product in self.productTable.model()._data:
-                if product.uploadFlag:
-                    payload = product.productPayload(self.ADMIN_API)
-                    payload["visibilities"] = [{ "id": payload["taxId"], "salesChannelId": salesChannelId, "visibility": 30 }]
-                    self.ADMIN_API.product.upsert_product_payload(str(product.productNumber), payload)
-                    if product.imageUrl:
-                        try:
-                            self.ADMIN_API.product.upsert_product_pictures(product_number=product.productNumber, l_product_pictures=[sub_product.ProductPicture(url=product.imageUrl, position=5)])
-                        except:
-                            worker.printMessage("Fehler beim hochladen des Bildes, vermutlich ist der Bild link komisch")
-                            worker.percentage+=1
-                            continue
-                    product.uploadFlag = False
-                    product.uploadedFlag = True
-                    worker.sendObject(product)
+                try:
+                    if product.uploadFlag:
+                        payload = product.productPayload(self.ADMIN_API)
+                        payload["visibilities"] = [{ "id": self.ADMIN_API.product.calc_new_product_id(product_number=product.productNumber), "salesChannelId": salesChannelId, "visibility": 30 }]
+                        self.ADMIN_API.product.upsert_product_payload(str(product.productNumber), payload)
+                        if product.imageUrl:
+                            try:
+                                self.ADMIN_API.product.upsert_product_pictures(product_number=product.productNumber, l_product_pictures=[sub_product.ProductPicture(url=product.imageUrl, position=5)])
+                            
+                            except Exception as a:
+                                worker.printMessage("Fehler beim hochladen des Bildes, vermutlich ist der Bild link komisch")
+                                print("Fehler beim hochladen des Bildes")
+                                print(a)
+                                worker.percentage+=1
+                                continue
+                        product.uploadFlag = False
+                        product.uploadedFlag = True
+                        worker.sendObject(product)
+                except Exception as e:
+                    worker.printMessage(f"Upload failed for product: {product.productName}")
+                    print(e)
                 worker.percentage+=1
             worker.printMessage("Produkte hochgeladen")
             worker.finish()
 
 
-
-        
-
+    def upload_media_from_url(self, media_id: str, url: str, filename_suffix: str, filename_stem: str) -> None:
+        """
+        uploads the media to an existing media_id
+        note that the same media_filename must not exist twice in the shop, even if on different media folders !
+        :param media_id:        the media id
+        :param url:             the url to upload the media from
+        :param filename_suffix: the extension, like "jpg"
+        :param filename_stem:   the filename (without extension)
+        :return:
+        """
+        # upload_media_from_url}}}
+        # upload the media via url
+        print("Ich bin neu")
+        filename_suffix = filename_suffix.lstrip(".")
+        print(f"url: {url}, suffix: {filename_suffix}, stem: {filename_stem}")
+        if validators.url(url):
+            payload = {"url": url}
+            self.ADMIN_API.media._admin_client.request_post(f"_action/media/{media_id}/upload?extension={filename_suffix}&fileName={filename_stem}", payload)
+        else:
+            print("upload local file")
+            print(url.replace("file:///", ''))
+            payload = open(url.replace("file:///", ''), 'rb').read()
+            self.ADMIN_API.media._admin_client.request_post(f"_action/media/{media_id}/upload?extension={filename_suffix}&fileName={filename_stem}", payload=payload, content_type=f'image/{filename_suffix}')
 
     
     
