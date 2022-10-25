@@ -1,7 +1,7 @@
-import packaging
-import packaging.version
-import packaging.specifiers
-import packaging.requirements
+# import packaging
+# import packaging.version
+# import packaging.specifiers
+# import packaging.requirements
 
 import validators
 
@@ -10,10 +10,9 @@ from decimal import Decimal
 import string
 import sys
 import threading
-import tabula
+from tabula.io import read_pdf
 import pandas as pd
 import typing
-import json
 
 from PyQt6.QtCore  import *
 from PyQt6.QtWidgets import *
@@ -567,6 +566,10 @@ class ProductTableModel(QAbstractTableModel):
                     return QColor("green")
                 elif self._data[index.row()].uploadFlag:
                     return QColor("orange")
+            elif role == Qt.ItemDataRole.ForegroundRole:
+                if self._data[index.row()].productNameOnline:
+                    # print(self._data[index.row()].productNameOnline)
+                    return QColor("blue")
         return None
 
     def setData(self, index, value, role):
@@ -1092,7 +1095,7 @@ class Ui_MainWindow(object):
             return
         try:
             if fname.endswith(".pdf"):
-                frames = tabula.read_pdf(fname, pages='all')
+                frames = read_pdf(fname, pages='all')
             elif fname.endswith('.csv'):
                 frames = [pd.read_csv(fname)]
             elif fname.lower().endswith('.xlsx'):
@@ -1100,8 +1103,9 @@ class Ui_MainWindow(object):
             else:
                 self.statusbar.showMessage(self.language.InvalidFile, 5000)
 
-        except:
+        except Exception as e:
             self.statusbar.showMessage(self.language.fileError, 5000)
+            print(e)
         else:
             if not frames:
                 self.statusbar.showMessage(self.language.noFrames, 5000)
@@ -1265,6 +1269,8 @@ class Ui_MainWindow(object):
                 # productname
                 if self.language.ImportSelection(0).name in row.keys():
                     product.productName = row[self.language.ImportSelection(0).name]
+                    if not product.productName:
+                            product.productName = product.productNameOnline
                 # amount
                 if self.language.ImportSelection(4).name in row.keys():
                     try:

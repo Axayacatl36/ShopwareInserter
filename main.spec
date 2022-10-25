@@ -6,7 +6,7 @@ block_cipher = None
 
 a = Analysis(
     ['main.py'],
-    pathex=['C:\\Users\\schne\\AppData\\Local\\Programs\\Python\\Python38\\lib\\site-packages'],
+    pathex=['C:\\Users\\schne\\anaconda3\\envs\\Inserter\\Lib\\site-packages'],
     binaries=[],
     datas=[],
     hiddenimports=[],
@@ -21,6 +21,8 @@ a = Analysis(
 )
 pyz = PYZ(a.pure, a.zipped_data, cipher=block_cipher)
 a.datas += Tree('./resources', prefix='resources')
+a.datas += Tree('C:\\Users\\schne\\anaconda3\\envs\\Inserter\\Lib\\site-packages\\tabula', prefix='tabula')
+a.datas += Tree('C:\\Users\\schne\\anaconda3\\envs\\Inserter\\Lib\\site-packages\\certifi', prefix='certifi')
 exe = EXE(
     pyz,
     a.scripts,
