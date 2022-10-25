@@ -4,6 +4,8 @@
 # import packaging.requirements
 
 import validators
+import logging
+import json
 
 import copy
 from decimal import Decimal
@@ -25,6 +27,8 @@ from googletrans import Translator
 
 from language import *
 import urllib.request
+
+import copy
 
 def resource_path(relative_path):
     """ Get absolute path to resource, works for dev and for PyInstaller """
@@ -105,7 +109,7 @@ class ProgressBar(QWidget):
     def finished(self):
         self.progress.hide()
 
-    def launch(self, long_running_function, args=[], connectSendObject=None):
+    def launch(self, long_running_function, args=[],connectSendObject=None, kwargs=dict()):
         worker = PercentageWorker()
         worker.sendMessage.connect(self.mainWindow.printMessage)
         worker.started.connect(self.start)
@@ -113,40 +117,38 @@ class ProgressBar(QWidget):
         if connectSendObject:
             worker.sendingObject.connect(connectSendObject)
         worker.percentageChanged.connect(self.progress.setValue)
+        kwargs["worker"]=worker
         threading.Thread(
             target=long_running_function,
             args=args,
-            kwargs=dict(worker=worker),
+            kwargs=kwargs,
             daemon=True,
         ).start()
 
-class Product(QStandardItem):
-    class LabelImage(QLabel):
+
+class LabelImage(QLabel):
         def __init__(self, title, parent = None,):
             super().__init__(title, parent)
             self._parent = parent
+            self.selectedProduct = None
             self.setAlignment(Qt.AlignmentFlag.AlignCenter)
-            # self.setText('\n\n Drop Image Here \n\n')
+            self.setText('\n\n Drop Image Here \n\n')
             self.setStyleSheet('''
                 QLabel{
                     border: 4px dashed #aaa
                 }
             ''')
-            self.setText("")
             self.setScaledContents(True)
             self.setAcceptDrops(True)
 
-        def setPixmap(self, image):
-            super().setPixmap(image)
-
         def dragEnterEvent(self, event):
-            if event.mimeData().hasImage:
+            if event.mimeData().hasImage and self.selectedProduct:
                 event.accept()
             else:
                 event.ignore()
 
         def dragMoveEvent(self, event):
-            if event.mimeData().hasImage:
+            if event.mimeData().hasImage and self.selectedProduct:
                 event.accept()
             else:
                 event.ignore()
@@ -154,95 +156,113 @@ class Product(QStandardItem):
         def dropEvent(self, event):
             if event.mimeData().hasImage:
                 try:
-
                     event.setDropAction(Qt.DropAction.CopyAction)
                     file_path = str(event.mimeData().urls()[0].toString())
                     if validators.url(file_path):
                         data = urllib.request.urlopen(file_path).read()
                         pixmap = QPixmap()
                         pixmap.loadFromData(data)
-                        
                     else:
-                        print(file_path)
-                        print("Local Files are not supported at the moment")
                         pixmap = QPixmap(file_path.replace("file:///", ''))
-
                     self.setPixmap(pixmap)
-                    self._parent.setProductUrl(file_path, self)
-                    
-                        
+                    # self._parent.setProductUrl(file_path, self)
+                          
                 except Exception as e:
-                        print("invalid Link")
-                        print(e)
+                    logging.error(f"Bild konnte nicht gesetzt werden\nException: {e}\n\nLink: {file_path}")
+
+                    msg = QMessageBox()
+                    msg.setIcon(QMessageBox.Icon.Critical)
+
+                    msg.setWindowTitle("Es ist ein Fehler aufgetreten")
+                    msg.setText("Bild konnte nicht gesetzt werden")
+                    
+                    msg.setDetailedText(f"Exception: {e}\n\nLink: {file_path}")
+                    msg.setStandardButtons(QMessageBox.StandardButton.Ok)
+                    msg.exec()
 
 
+class Product(QStandardItem):
     def __init__(self,
-        productNumber: Union[int, str],
-        productName: str = "",
-        priceBrutto: Decimal = Decimal("0.00"),
-        priceNetto: Decimal = Decimal("0.00"),
-        manufacturer: string = "",
-        category: list = [],
-        font_size=6, color=QColor(0, 0, 0)):
-        
-        super().__init__()
-        self.setFont(QFont('Open Sans', font_size))
-        self.productName    = productName
-        self.productNumber  = productNumber
-        self.priceBrutto    = priceBrutto
-        self.priceNetto     = priceNetto
-        self._priceBruttoRaw = Decimal(0)
-        self._priceNettoRaw  = Decimal(0)
-        self.manufacturer   = manufacturer
-        self.category       = category
-        self.stock          = Decimal("10.00")
-        self.minimumPurchase = Decimal("1.00")
-        self.description    = None
-        self._amount = Decimal(1)
-        self.variants: list = []
-        self.imageUrl = ""
+                # local parameters
+                productNumber: Union[int, str],
+                productName: str        = "",
+                priceBrutto             = Decimal("0.00"),
+                priceNetto              = Decimal("0.00"),
+                _priceBruttoRaw         = Decimal("0"),
+                _priceNettoRaw          = Decimal("0"),
+                manufacturer: string    = "",
+                category: list          = [],
+                stock                   = Decimal("10.00"),
+                minimumPurchase         = Decimal("1.00"),
+                description: str        = "",
+                _amount                 = Decimal("1"),
+                variants: list          = [],
+                imageUrl: str           = "",
+                # online parameters
+                existsOnline            = False,
+                productNameOnline       = "",
+                priceBruttoOnline       = Decimal("0.00"),
+                priceNettoOnline        = Decimal("0.00"),
+                manufacturerOnline      = "",
+                categoryOnline          = [],
+                stockOnline             = Decimal("0.00"),
+                minimumPurchaseOnline   = Decimal("0.00"),
+                descriptionOnline       = "",
+                # flags
+                uploadFlag              = False,
+                uploadedFlag            = False,
 
-        self.existsOnline = False
-        self.productNameOnline  = None
-        self.priceBruttoOnline  = None
-        self.priceNettoOnline   = None
-        self.manufacturerOnline = None
-        self.categoryOnline     = []
-        self.stockOnline        = None
-        self.minimumPurchaseOnline = None
-        self.descriptionOnline  = None
+                font_size=6, color=QColor(0, 0, 0)):
+        try:
+            super().__init__()
+            self.setFont(QFont('Open Sans', font_size))
+            # local product information
+            self.productNumber      = copy.deepcopy(str(productNumber))
+            self.productName        = copy.deepcopy(str(productName))
+            self.priceBrutto        = copy.deepcopy(Decimal(priceBrutto))
+            self.priceNetto         = copy.deepcopy(Decimal(priceNetto))
+            self._priceBruttoRaw    = copy.deepcopy(Decimal(_priceBruttoRaw))
+            self._priceNettoRaw     = copy.deepcopy(Decimal(_priceNettoRaw))
+            self.manufacturer       = copy.deepcopy(str(manufacturer))
+            self.category           = copy.deepcopy(list(category))
+            self.stock              = copy.deepcopy(Decimal(stock))
+            self.minimumPurchase    = copy.deepcopy(Decimal(minimumPurchase))
+            self.description        = copy.deepcopy(str(description))
+            self._amount            = copy.deepcopy(Decimal(_amount))
+            self.variants           = []
+            # for element in list(variants):
+            #     print (element) #check functionality
+            self.imageUrl = copy.deepcopy(str(imageUrl))
+            # product information on server
+            self.existsOnline = copy.deepcopy(bool(existsOnline))
+            self.productNameOnline  = copy.deepcopy(str(productNameOnline)) if productNameOnline else ""
+            self.priceBruttoOnline  = copy.deepcopy(Decimal(priceBruttoOnline)) if priceBruttoOnline else Decimal("0")
+            self.priceNettoOnline   = copy.deepcopy(Decimal(priceNettoOnline))  if priceNettoOnline else Decimal("0")
+            self.manufacturerOnline = copy.deepcopy(str(manufacturerOnline))    if manufacturerOnline else ""
+            self.categoryOnline     = copy.deepcopy(list(categoryOnline))       if categoryOnline else []
+            self.stockOnline        = copy.deepcopy(Decimal(stockOnline))       if stockOnline else Decimal("0")
+            self.minimumPurchaseOnline = copy.deepcopy(Decimal(minimumPurchaseOnline)) if minimumPurchaseOnline else Decimal("0")
+            self.descriptionOnline  = copy.deepcopy(str(descriptionOnline))     if descriptionOnline else ""
+            # flags
+            self.uploadFlag = copy.deepcopy(bool(uploadFlag))
+            self.uploadedFlag = copy.deepcopy(bool(uploadedFlag))
 
-        self.uploadFlag = False
-        self.uploadedFlag = False
-    
-    def deepcopy(self): 
-        _copy = Product(productNumber=copy.deepcopy(self.productNumber), productName=copy.deepcopy(self.productName))
-        _copy.priceBrutto   = copy.deepcopy(self.priceBrutto    )
-        _copy.priceNetto    = copy.deepcopy(self.priceNetto     )
-        _copy.priceBruttoRaw = copy.deepcopy(self.priceBruttoRaw)
-        _copy.priceNettoRaw = copy.deepcopy(self.priceNettoRaw  )
-        _copy.manufacturer  = copy.deepcopy(self.manufacturer   )
-        _copy.category      = copy.deepcopy(self.category       )
-        _copy.stock         = copy.deepcopy(self.stock          )
-        _copy.minimumPurchase = copy.deepcopy(self.minimumPurchase)
-        _copy.description   = copy.deepcopy(self.description    )
-        _copy.amount       = copy.deepcopy(self.amount        )
-        _copy.variants      = copy.deepcopy(self.variants       )
+        except Exception as e:
+            logging.error(f"Produkt konnte nicht erstellt werden\nException: {e}\ndict: {locals()}\n\n")
 
-        _copy.existsOnline          = copy.deepcopy(self.existsOnline         )
-        _copy.productNameOnline     = copy.deepcopy(self.productNameOnline    )
-        _copy.priceBruttoOnline     = copy.deepcopy(self.priceBruttoOnline    )
-        _copy.priceNettoOnline      = copy.deepcopy(self.priceNettoOnline     )
-        _copy.manufacturerOnline    = copy.deepcopy(self.manufacturerOnline   )
-        _copy.categoryOnline        = copy.deepcopy(self.categoryOnline       )
-        _copy.stockOnline           = copy.deepcopy(self.stockOnline          )
-        _copy.minimumPurchaseOnline = copy.deepcopy(self.minimumPurchaseOnline)
-        _copy.descriptionOnline     = copy.deepcopy(self.descriptionOnline    )
+            msg = QMessageBox()
+            msg.setIcon(QMessageBox.Icon.Critical)
 
-        _copy.imageUrl = copy.deepcopy(self.imageUrl)
-        _copy.uploadFlag = copy.deepcopy(self.uploadFlag)
-        _copy.uploadedFlag = copy.deepcopy(self.uploadedFlag)
-        return _copy
+            msg.setWindowTitle("Es ist ein Fehler aufgetreten")
+            msg.setText(f"Produkt {productName} {productNumber} konnte nicht erstellt werden")
+            
+            msg.setDetailedText(f"Exception: {e}")
+            msg.setStandardButtons(QMessageBox.StandardButton.Ok)
+            msg.exec()
+
+    @classmethod
+    def fromDict(self, dict : dict)-> Product:
+        return Product(**dict)
     
     @property
     def priceBruttoRaw(self):
@@ -735,7 +755,7 @@ class TableProducts(QTableView):
         self.model()._data[self.indexWidgets.index(label)].imageUrl=file_path
     
     def addIndexWidget(self):
-        self.indexWidgets.append(Product.LabelImage(str(len(self.indexWidgets)), self))
+        self.indexWidgets.append(LabelImage(str(len(self.indexWidgets)), self))
         self.setIndexWidget(self.model().index(len(self.indexWidgets)-1,0), self.indexWidgets[-1])
     
     def dragMoveEvent(self, event):
@@ -775,7 +795,8 @@ class TableProducts(QTableView):
         self.model().layoutChanged.emit()   
     
     def append(self, product: "Product"):
-        newcopy = product.deepcopy()
+        # newcopy = product.deepcopy()
+        newcopy = Product.fromDict(product.__dict__)
         if product not in self.model()._data:
             self.model().append(newcopy)
             self.addIndexWidget()
@@ -886,6 +907,7 @@ class ListCategory(QListView):
         if item.checkState() == Qt.CheckState.Checked:
             if item.id not in self.selectedProduct.category:
                 self.selectedProduct.category.append(item.id)
+                print(item.id)
         else:
             if item.id in self.selectedProduct.category:
                 self.selectedProduct.category.remove(item.id)
@@ -1202,10 +1224,7 @@ class Ui_MainWindow(object):
     
     def importPandasTableAll(self):
         if self.importTable.model():
-            self.progressBar.launch(self.importProductsAll, connectSendObject=self.productTable.append)
-
-    def importProductsAll(self, worker, allTables: bool = False):
-        self.importProducts(worker, allTables= True)
+            self.progressBar.launch(self.importProducts, connectSendObject=self.productTable.append, kwargs=dict(allTables= True))
     
     def importProducts(self, worker, allTables: bool = False):
         if worker is None:
@@ -1230,87 +1249,117 @@ class Ui_MainWindow(object):
             if table._data.empty:
                 continue
             for indTable, row in table._data.iterrows():
-                # productnumber not in keys
-                if productNumberLang not in row.keys(): 
-                    worker.printMessage(self.language.ImportSelectionError.KeyErrorP1+productNumberLang+self.language.ImportSelectionError.KeyErrorP2+str(self.frameList.index(table)))
+                try:
+                    # productnumber not in keys
+                    if productNumberLang not in row.keys(): 
+                        worker.printMessage(self.language.ImportSelectionError.KeyErrorP1+productNumberLang+self.language.ImportSelectionError.KeyErrorP2+str(self.frameList.index(table)))
+                        logging.warning(self.language.ImportSelectionError.KeyErrorP1+productNumberLang+self.language.ImportSelectionError.KeyErrorP2+str(self.frameList.index(table)))
+                        worker.finish()
+                        return
+                    # valid value for productnumber
+                    if row[productNumberLang] is None or row[productNumberLang] == "":
+                        worker.printMessage(productNumberLang + self.language.ImportSelectionError.ValueError1 + str(self.frameList.index(table)) + productNumberLang + self.language.ImportSelectionError.ValueError2 + str(indTable))
+                        logging.warning(productNumberLang + self.language.ImportSelectionError.ValueError1 + str(self.frameList.index(table)) + productNumberLang + self.language.ImportSelectionError.ValueError2 + str(indTable))
+                        worker.finish()
+                        return
+                    # create new product or edit existing
+                    product = None
+                    # search existing products for product number
+                    for prod in self.productTable.model().getProducts():
+                        if prod.productNumber == row[productNumberLang]:
+                            product = prod
+                            break
+                        self.searchChildProducts(prod.variants, row[productNumberLang])
+                    # when this productnumber does not exist
+                    if product == None:
+                        product = Product(row[productNumberLang])
+                        try:
+                            # add product to list of products
+                            if self.ADMIN_API.product.is_product_number_existing(product.productNumber):
+                                product.existsOnline = True
+                                # get online product data
+                                product_online = self.ADMIN_API.product._admin_client.request_get(f"product/{self.ADMIN_API.product.get_product_id_by_product_number(product.productNumber)}", dict())["data"]
+                                product.productNameOnline   = product_online["name"]
+                                product.priceBruttoOnline   = Decimal(str(product_online["price"][0]["gross"]))
+                                product.priceNettoOnline    = Decimal(str(product_online["price"][0]["net"]))
+                                product.manufacturerOnline  = str(product_online["manufacturer"])
+                                product.categoryOnline      =  product_online["categoryIds"]
+                                product.minimumPurchaseOnline = Decimal(str(product_online["minPurchase"]))
+                                product.descriptionOnline   = str(product_online["description"])
+                                product.stockOnline         = Decimal(str(product_online["availableStock"]))
+                                if product_online["categoryIds"]:
+                                    product.category            = list(product_online["categoryIds"])
+                        except Exception as onlineException:
+                            logging.error(f"Error getting online Data of ProductNumber {product.productNumber}\n\n{onlineException}")
+                            worker.printMessage(f"Error getting online Data of ProductNumber {product.productNumber}")
+                            worker.finish()
+                            return
+                    ## fill product with data
+                    # productname
+                    if self.language.ImportSelection(0).name in row.keys():
+                        product.productName = row[self.language.ImportSelection(0).name]
+                        if not product.productName:
+                                product.productName = product.productNameOnline
+                    # amount
+                    if self.language.ImportSelection(4).name in row.keys():
+                        try:
+                            product.amount = Decimal(str(row[self.language.ImportSelection(4).name]))
+                        except:
+                            logging.warning(self.language.ImportSelectionError.ConvertError1+self.language.ImportSelection(4).name+self.language.ImportSelectionError.ConvertError2+product.productName)
+                            worker.printMessage(self.language.ImportSelectionError.ConvertError1+self.language.ImportSelection(4).name+self.language.ImportSelectionError.ConvertError2+product.productName)
+                            worker.finish()
+                            return
+                    # price netto
+                    if self.language.ImportSelection(2).name in row.keys():
+                        try:
+                            product.priceNettoRaw = Decimal(str(row[self.language.ImportSelection(2).name]))
+                        except:
+                            logging.warning(self.language.ImportSelectionError.ConvertError1+self.language.ImportSelection(2).name+self.language.ImportSelectionError.ConvertError2+product.productName)
+                            worker.printMessage(self.language.ImportSelectionError.ConvertError1+self.language.ImportSelection(2).name+self.language.ImportSelectionError.ConvertError2+product.productName)
+                            worker.finish()
+                            return
+                    # price brutto
+                    if self.language.ImportSelection(3).name in row.keys():
+                        try:
+                            product.priceBruttoRaw = Decimal(str(row[self.language.ImportSelection(3).name]))
+                        except:
+                            logging.warning(self.language.ImportSelectionError.ConvertError1+self.language.ImportSelection(3).name+self.language.ImportSelectionError.ConvertError2+product.productName)
+                            worker.printMessage(self.language.ImportSelectionError.ConvertError1+self.language.ImportSelection(3).name+self.language.ImportSelectionError.ConvertError2+product.productName)
+                            worker.finish()
+                            return
+                    # stock
+                    if self.language.ImportSelection(5).name in row.keys():
+                        try:
+                            product.stock = Decimal(str(row[self.language.ImportSelection(5).name]))
+                        except:
+                            logging.warning(self.language.ImportSelectionError.ConvertError1+self.language.ImportSelection(5).name+self.language.ImportSelectionError.ConvertError2+product.productName)
+                            worker.printMessage(self.language.ImportSelectionError.ConvertError1+self.language.ImportSelection(5).name+self.language.ImportSelectionError.ConvertError2+product.productName)
+                            worker.finish()
+                            return
+                    elif product.stockOnline:
+                        product.stock = product.stockOnline
+                    #minimum purchase
+                    if self.language.ImportSelection(7).name in row.keys():
+                        try:
+                            product.minimumPurchase = Decimal(str(row[self.language.ImportSelection(7).name]))
+                        except:
+                            logging.warning(self.language.ImportSelectionError.ConvertError1+self.language.ImportSelection(7).name+self.language.ImportSelectionError.ConvertError2+product.productName)
+                            worker.printMessage(self.language.ImportSelectionError.ConvertError1+self.language.ImportSelection(7).name+self.language.ImportSelectionError.ConvertError2+product.productName)
+                            worker.finish()
+                            return
+                    #description
+                    if self.language.ImportSelection(6).name in row.keys():
+                        product.description = row[self.language.ImportSelection(6).name]
+                    #manufacturer
+                    if self.language.ImportSelection(8).name in row.keys():
+                        product.manufacturer= row[self.language.ImportSelection(8).name]
+                    worker.percentage += 1
+                    worker.sendObject(product)
+                except Exception as outer:
+                    logging.error(f"Fehler beim importieren des Produkts {product.productName} {product.productNumber}\nException: {outer}\nLocals: {locals()}\n\n")
+                    worker.printMessage(f"Fehler beim importieren des Produkts {product.productName} {product.productNumber}")
+                    worker.finish()
                     return
-                # valid value for productnumber
-                if row[productNumberLang] is None or row[productNumberLang] == "":
-                    worker.printMessage(productNumberLang + self.language.ImportSelectionError.ValueError1 + str(self.frameList.index(table)) + productNumberLang + self.language.ImportSelectionError.ValueError2 + str(indTable))
-                    return
-                # create new product or edit existing
-                product = None
-                # search existing products for product number
-                for prod in self.productTable.model().getProducts():
-                    if prod.productNumber == row[productNumberLang]:
-                        product = prod
-                        break
-                    self.searchChildProducts(prod.variants, row[productNumberLang])
-                # when this productnumber does not exist
-                if product == None:
-                    product = Product(row[productNumberLang])
-                    # add product to list of products
-                    if self.ADMIN_API.product.is_product_number_existing(product.productNumber):
-                        product.existsOnline = True
-                        # get online product data
-                        product_online = self.ADMIN_API.product._admin_client.request_get(f"product/{self.ADMIN_API.product.get_product_id_by_product_number(product.productNumber)}", dict())["data"]
-                        product.productNameOnline   = product_online["name"]
-                        product.priceBruttoOnline   = Decimal(str(product_online["price"][0]["gross"]))
-                        product.priceNettoOnline    = Decimal(str(product_online["price"][0]["net"]))
-                        product.manufacturerOnline  = str(product_online["manufacturer"])
-                        product.categoryOnline      =  product_online["categoryIds"]
-                        product.minimumPurchaseOnline = Decimal(str(product_online["minPurchase"]))
-                        product.descriptionOnline   = str(product_online["description"])
-                        product.stockOnline         = Decimal(str(product_online["availableStock"]))
-                        if product_online["categoryIds"]:
-                            product.category            = list(product_online["categoryIds"])
-                
-                ## fill product with data
-                # productname
-                if self.language.ImportSelection(0).name in row.keys():
-                    product.productName = row[self.language.ImportSelection(0).name]
-                    if not product.productName:
-                            product.productName = product.productNameOnline
-                # amount
-                if self.language.ImportSelection(4).name in row.keys():
-                    try:
-                        product.amount = Decimal(str(row[self.language.ImportSelection(4).name]))
-                    except:
-                        worker.printMessage(self.language.ImportSelectionError.ConvertError1+self.language.ImportSelection(4).name+self.language.ImportSelectionError.ConvertError2+product.productName)
-                # price netto
-                if self.language.ImportSelection(2).name in row.keys():
-                    try:
-                        product.priceNettoRaw = Decimal(str(row[self.language.ImportSelection(2).name]))
-                    except:
-                        worker.printMessage(self.language.ImportSelectionError.ConvertError1+self.language.ImportSelection(2).name+self.language.ImportSelectionError.ConvertError2+product.productName)
-                # price brutto
-                if self.language.ImportSelection(3).name in row.keys():
-                    try:
-                        product.priceBruttoRaw = Decimal(str(row[self.language.ImportSelection(3).name]))
-                    except:
-                        worker.printMessage(self.language.ImportSelectionError.ConvertError1+self.language.ImportSelection(3).name+self.language.ImportSelectionError.ConvertError2+product.productName)
-                # stock
-                if self.language.ImportSelection(5).name in row.keys():
-                    try:
-                        product.stock = Decimal(str(row[self.language.ImportSelection(5).name]))
-                    except:
-                        worker.printMessage(self.language.ImportSelectionError.ConvertError1+self.language.ImportSelection(5).name+self.language.ImportSelectionError.ConvertError2+product.productName)
-                elif product.stockOnline:
-                    product.stock = product.stockOnline
-                #minimum purchase
-                if self.language.ImportSelection(7).name in row.keys():
-                    try:
-                        product.minimumPurchase = Decimal(str(row[self.language.ImportSelection(7).name]))
-                    except:
-                        worker.printMessage(self.language.ImportSelectionError.ConvertError1+self.language.ImportSelection(7).name+self.language.ImportSelectionError.ConvertError2+product.productName)
-                #description
-                if self.language.ImportSelection(6).name in row.keys():
-                    product.description = row[self.language.ImportSelection(6).name]
-                #manufacturer
-                if self.language.ImportSelection(8).name in row.keys():
-                    product.manufacturer= row[self.language.ImportSelection(8).name]
-                worker.percentage += 1
-                worker.sendObject(product)
         worker.finish()
     
     def searchChildProducts(self, children: typing.List["Product"], productNumber):
@@ -1319,7 +1368,7 @@ class Ui_MainWindow(object):
                 return child
         return None
 
-    def printMessage(self, message:str, duration = 10000):
+    def printMessage(self, message:str, duration = 15000):
         self.statusbar.showMessage(message, duration)
     
     def uploadProductsWrapper(self):
@@ -1452,6 +1501,11 @@ class Ui_MainWindow(object):
 
 
 if __name__ == "__main__":
+    logging.basicConfig(filename= os.path.join(os.path.join(os.path.expanduser('~')), 'ShopwareInserterLog.txt') ,
+                    filemode='a',
+                    format='%(asctime)s,%(msecs)d %(name)s %(levelname)s %(message)s',
+                    datefmt='%H:%M:%S',
+                    level=logging.WARNING)
     app = QApplication(sys.argv)
     MainWindow = QMainWindow()
     ui = Ui_MainWindow(MainWindow, Language.German())
