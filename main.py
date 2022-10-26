@@ -28,7 +28,6 @@ from googletrans import Translator
 from language import *
 import urllib.request
 
-import copy
 
 def resource_path(relative_path):
     """ Get absolute path to resource, works for dev and for PyInstaller """
@@ -248,8 +247,8 @@ class Product(QStandardItem):
             self.uploadedFlag = copy.deepcopy(bool(uploadedFlag))
 
         except Exception as e:
-            logging.error(f"Produkt konnte nicht erstellt werden\nException: {e}\ndict: {locals()}\n\n")
-
+            logging.error(f"Produkt {productName} {productNumber} konnte nicht erstellt werden\nException: {e}\ndict: {locals()}\n\n")
+            # ui.printMessage("Produkt {productName} {productNumber} konnte nicht erstellt werden")
             msg = QMessageBox()
             msg.setIcon(QMessageBox.Icon.Critical)
 
@@ -1127,7 +1126,7 @@ class Ui_MainWindow(object):
 
         except Exception as e:
             self.statusbar.showMessage(self.language.fileError, 5000)
-            print(e)
+            logging.error(f"couldnt open file {fname}\n{e}\n{locals()}\n\n")
         else:
             if not frames:
                 self.statusbar.showMessage(self.language.noFrames, 5000)
@@ -1385,7 +1384,8 @@ class Ui_MainWindow(object):
                     salesChannelId = str(dictionary["id"])
                     break
 
-        except:
+        except Exception as salesChannnelException:
+            logging.error(f"Couldnt find sales channel\n{salesChannnelException}")
             worker.printMessage("Couldnt find sales channel")
         else:
             worker.start()
@@ -1401,17 +1401,17 @@ class Ui_MainWindow(object):
                             
                             except Exception as a:
                                 worker.printMessage("Fehler beim hochladen des Bildes, vermutlich ist der Bild link komisch")
-                                print("Fehler beim hochladen des Bildes")
-                                print(a)
+                                logging.error(f"Fehler beim hochladen des Bildes: {product.productName}\n{uploadException}\n{locals()}\n\n")
                                 worker.percentage+=1
                                 continue
                         product.uploadFlag = False
                         product.uploadedFlag = True
                         worker.sendObject(product)
-                except Exception as e:
+                except Exception as uploadException:
                     worker.printMessage(f"Upload failed for product: {product.productName}")
-                    print(e)
-                worker.percentage+=1
+                    logging.error(f"Upload failed for product: {product.productName}\n{uploadException}\n{locals()}\n\n")
+                finally:
+                    worker.percentage+=1
             worker.printMessage("Produkte hochgeladen")
             worker.finish()
 
