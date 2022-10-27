@@ -125,7 +125,11 @@ class ProgressBar(QWidget):
         ).start()
 
 
-class LabelImage(QLabel):
+
+
+
+class Product(QStandardItem):
+    class LabelImage(QLabel):
         def __init__(self, title, parent = None,):
             super().__init__(title, parent)
             self._parent = parent
@@ -141,13 +145,13 @@ class LabelImage(QLabel):
             self.setAcceptDrops(True)
 
         def dragEnterEvent(self, event):
-            if event.mimeData().hasImage and self.selectedProduct:
+            if event.mimeData().hasImage:# and self.selectedProduct:
                 event.accept()
             else:
                 event.ignore()
 
         def dragMoveEvent(self, event):
-            if event.mimeData().hasImage and self.selectedProduct:
+            if event.mimeData().hasImage:# and self.selectedProduct:
                 event.accept()
             else:
                 event.ignore()
@@ -161,10 +165,13 @@ class LabelImage(QLabel):
                         data = urllib.request.urlopen(file_path).read()
                         pixmap = QPixmap()
                         pixmap.loadFromData(data)
+                        print("online")
                     else:
                         pixmap = QPixmap(file_path.replace("file:///", ''))
+                        print("local")
                     self.setPixmap(pixmap)
-                    # self._parent.setProductUrl(file_path, self)
+                    print("pixmap gesetzt")
+                    self._parent.setProductUrl(file_path, self)
                           
                 except Exception as e:
                     logging.error(f"Bild konnte nicht gesetzt werden\nException: {e}\n\nLink: {file_path}")
@@ -179,8 +186,6 @@ class LabelImage(QLabel):
                     msg.setStandardButtons(QMessageBox.StandardButton.Ok)
                     msg.exec()
 
-
-class Product(QStandardItem):
     def __init__(self,
                 # local parameters
                 productNumber: Union[int, str],
@@ -300,30 +305,35 @@ class Product(QStandardItem):
         currency_iso_code = "EUR"
         linked = True
 
-        if not self.priceNetto:
+        if not self.priceNetto and self.priceBrutto:
             tax_rate = ADMIN_API.product.tax.get_tax_rate_by_name(tax_name=tax_name)
             self.priceNetto = self.priceBrutto / (1 + tax_rate / 100)
-        if not self.priceBrutto:
+        if not self.priceBrutto and self.priceNetto:
             tax_rate = ADMIN_API.product.tax.get_tax_rate_by_name(tax_name=tax_name)
             self.priceBrutto = self.priceNetto * (1 + tax_rate / 100)
         currency_id = ADMIN_API.product.currency.get_currency_id_by_iso_code(currency_iso_code=currency_iso_code)
         # new_product_id = ADMIN_API.product.calc_new_product_id(product_number=self.productNumber)
         tax_id =  ADMIN_API.tax.get_tax_id_by_name(tax_name=tax_name)
-        payload["name"] = self.productName
+        if self.productName:
+            payload["name"] = self.productName
         if self.stock:
             payload["stock"] = int(self.stock)
         payload["taxId"] = tax_id
-        payload["price"] = [{"currencyId": currency_id, "gross": str(self.priceBrutto), "net": str(self.priceNetto), "linked": linked}]
+        if self.priceNetto or self. priceBrutto:
+            payload["price"] = [{"currencyId": currency_id, "gross": str(self.priceBrutto), "net": str(self.priceNetto), "linked": linked}]
         if self.manufacturer:
             manufacturer_id = ADMIN_API.product.calc_new_product_id(product_number=self.manufacturer)
             payload["manufacturer"] = {"id": manufacturer_id, "name": self.manufacturer }
-        payload["minPurchase"] = int(self.minimumPurchase)
-        payload["description"] = self.description
+        if self.minimumPurchase:
+            payload["minPurchase"] = int(self.minimumPurchase)
+        if self.description:
+            payload["description"] = self.description
         payload["active"] = True
         categorysPayload = []
         for cat in self.category:
             categorysPayload.append({"id":cat})
-        payload["categories"] = categorysPayload
+        if categorysPayload:
+            payload["categories"] = categorysPayload
         return payload
 
 class EditableHeaderView(QHeaderView):
@@ -603,10 +613,10 @@ class ProductTableModel(QAbstractTableModel):
                     product.productName = str(value)
                 elif index.column() == 3:   # priceNetto
                     if Decimal(value) >= 0:
-                        product.priceNetto = Decimal(value)
+                        product.priceNettoRaw = Decimal(value)*product.amount
                 elif index.column() == 4:   # priceBrutto
                     if Decimal(value) >= 0:
-                        product.priceBrutto = Decimal(value)
+                        product.priceBruttoRaw = Decimal(value)*product.amount
                 elif index.column() == 5:   # amount
                     if Decimal(value) >= 0:
                         product.amount = Decimal(value)
@@ -754,7 +764,7 @@ class TableProducts(QTableView):
         self.model()._data[self.indexWidgets.index(label)].imageUrl=file_path
     
     def addIndexWidget(self):
-        self.indexWidgets.append(LabelImage(str(len(self.indexWidgets)), self))
+        self.indexWidgets.append(Product.LabelImage(str(len(self.indexWidgets)), self))
         self.setIndexWidget(self.model().index(len(self.indexWidgets)-1,0), self.indexWidgets[-1])
     
     def dragMoveEvent(self, event):
@@ -1256,7 +1266,7 @@ class Ui_MainWindow(object):
                         worker.finish()
                         return
                     # valid value for productnumber
-                    if row[productNumberLang] is None or row[productNumberLang] == "":
+                    if str(row[productNumberLang]) is None or str(row[productNumberLang]) == "":
                         worker.printMessage(productNumberLang + self.language.ImportSelectionError.ValueError1 + str(self.frameList.index(table)) + productNumberLang + self.language.ImportSelectionError.ValueError2 + str(indTable))
                         logging.warning(productNumberLang + self.language.ImportSelectionError.ValueError1 + str(self.frameList.index(table)) + productNumberLang + self.language.ImportSelectionError.ValueError2 + str(indTable))
                         worker.finish()
@@ -1264,14 +1274,19 @@ class Ui_MainWindow(object):
                     # create new product or edit existing
                     product = None
                     # search existing products for product number
+                    print(f"current Product: {str(row[productNumberLang])}")
+                    print(list(produkt.productNumber for produkt in self.productTable.model().getProducts()))
                     for prod in self.productTable.model().getProducts():
-                        if prod.productNumber == row[productNumberLang]:
+                        print(f"{prod.productNumber} == {str(row[productNumberLang])} {prod.productNumber == str(row[productNumberLang])}")
+                        if prod.productNumber == str(row[productNumberLang]):
+                            print("called")
                             product = prod
                             break
-                        self.searchChildProducts(prod.variants, row[productNumberLang])
+                        self.searchChildProducts(prod.variants, str(row[productNumberLang]))
                     # when this productnumber does not exist
+                    print("\n")
                     if product == None:
-                        product = Product(row[productNumberLang])
+                        product = Product(str(row[productNumberLang]))
                         try:
                             # add product to list of products
                             if self.ADMIN_API.product.is_product_number_existing(product.productNumber):
